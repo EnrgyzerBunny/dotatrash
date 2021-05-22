@@ -16,6 +16,14 @@ client.on('ready', () => {
         }
     });
 
+    client.api.applications(client.user.id).commands.post({
+        data: {
+            name: "test-global",
+            description: "testing slash cmds"
+            // possible options here e.g. options: [{...}]
+        }
+    });
+
 
     client.ws.on('INTERACTION_CREATE', async interaction => {
         const command = interaction.data.name.toLowerCase();
@@ -28,6 +36,18 @@ client.on('ready', () => {
                     type: 4,
                     data: {
                         content: "I am a trash bot"
+                    }
+                }
+            })
+        }
+
+        if (command === 'test-global'){ 
+            
+            client.api.interactions(interaction.id, interaction.token).callback.post({
+                data: {
+                    type: 4,
+                    data: {
+                        content: "Global version: I'm still trash"
                     }
                 }
             })
