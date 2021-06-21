@@ -41,6 +41,7 @@ client.on('ready', () => {
 
     console.log("Client Initiated.");
 
+    
     //Discord Guild Level Command Registration ---------------------------------------------------
     client.api.applications(client.user.id).guilds(guild_id.id).commands.post({
         data: {
@@ -50,6 +51,7 @@ client.on('ready', () => {
         }
     });
 
+    /*
     client.api.applications(client.user.id).guilds(guild_id.id).commands.post({
         data: {
             name: "join",
@@ -58,20 +60,38 @@ client.on('ready', () => {
         }
     });
 
-    //Discord Global Level Command Registration ---------------------------------------------------
-    client.api.applications(client.user.id).commands.post({
+    client.api.applications(client.user.id).guilds(guild_id.id).commands.post({
         data: {
-            name: "test-global",
-            description: "testing slash cmds"
+            name: "createteam",
+            description: "Create a team for the current season"
             // possible options here e.g. options: [{...}]
         }
     });
+    */
+
+    //Discord Global Level Command Registration ---------------------------------------------------
 
     client.api.applications(client.user.id).commands.post({
         data: {
             name: "join",
             description: "Join the Dota Trash league"
             // possible options here e.g. options: [{...}]
+        }
+    });
+
+    client.api.applications(client.user.id).commands.post({
+        data: {
+            name: "createteam",
+            description: "Create a team for the current season",
+            // possible options here e.g. options: [{...}]
+            options: [
+                {
+                    name: "name",
+                    description: "Name of team",
+                    type: 3,
+                    required: true
+                }
+            ]
         }
     });
 
@@ -121,6 +141,70 @@ client.on('ready', () => {
                     type: 4,
                     data: {
                         content: "Joined successfully."
+                    }
+                }
+            });
+        }
+
+        if (command === 'createteam'){ 
+            //Verify user is an owner
+            if (!IsUser(user.id)){
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: "You are not in the league, please use the /join command."
+                        }
+                    }
+                });
+                return;
+            }
+            //Verify owner does not already have a team
+            let currentSeason = await GetCurrentSeasonId();
+            console.log("Season: " + currentSeason);
+            if (await HasTeam(user.id,currentSeason)) {
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: "Unable to create team: Team already exists."
+                        }
+                    }
+                });
+                return;
+            }
+
+            //Sanitize
+            console.log(JSON.stringify(args));
+            let teamName = null;
+            for (var i = 0; i < args.length;i++)
+            {
+                if (args[i].name == "name"){
+                    teamName = args[i].value.replace('\''||';'||'"','');
+                }
+            }
+
+            if (teamName == null){
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: "Unable to create team: Team name not provided."
+                        }
+                    }
+                });
+                return;
+            }
+
+            //Create
+            CreateTeam(user.id, currentSeason, teamName);
+
+            //Confirmation
+            client.api.interactions(interaction.id, interaction.token).callback.post({
+                data: {
+                    type: 4,
+                    data: {
+                        content: "Team created successfully."
                     }
                 }
             });
@@ -201,6 +285,44 @@ function WriteMapping(){
             client.users.cache.get('109498432921546752').send("Error: Unable to write user mapping file");
         }
         
+    });
+}
+
+function GetCurrentSeasonId()
+{
+    return new Promise(function (resolve, reject)
+    {
+        TrashDB.query("SELECT SeasonID FROM Season ORDER BY isActive DESC LIMIT 1", function (err, result, fields) {
+            if (err) throw err;
+            console.log(JSON.stringify(result));
+            resolve(Number(result[0].SeasonID));
+        });
+
+    });
+}
+
+function HasTeam(userId, currentSeason)
+{
+    return new Promise(function (resolve, reject)
+    {
+        TrashDB.query("SELECT TeamID, SeasonID FROM Team JOIN Owner ON Team.OwnerID = Owner.OwnerID WHERE OwnerName = '" + userId + "' ORDER BY SeasonID DESC LIMIT 1", function (err, result, fields) {
+            if (err) throw err;
+            console.log(JSON.stringify(result));
+            if (result.length == 0){
+                resolve(false);
+            }
+            else
+                resolve(Number(result[0].SeasonID) == currentSeason);
+        });
+
+    });
+}
+
+function CreateTeam(ownerName, season, teamName){
+    
+    TrashDB.query("INSERT INTO Team(TeamName,SeasonID,OwnerID) SELECT '" + teamName + "', '" + season + "', OwnerID FROM Owner WHERE OwnerName = '" + ownerName + "'", function (err, result, fields) {
+        if (err) throw err;
+        console.log(JSON.stringify(result));
     });
 }
 
