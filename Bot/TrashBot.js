@@ -227,33 +227,40 @@ client.login(token.token);
 
 function PullTeams(interactionid, interactiontoken)
 {
+    TrashDBPool.getConnection(function(error, connection) {
+        if (error) throw error;
+
+        connection.query("SELECT * FROM Team", function (err, result, fields) {
+            
+            console.log(JSON.stringify(result));
     
+            let ouput = "```\n";
     
-    TrashDBPool.query("SELECT * FROM Team", function (err, result, fields) {
-        if (err) throw err;
-        console.log(JSON.stringify(result));
-
-        let ouput = "```\n";
-
-        for (var i = 0; i < result.length;i++)
-        {
-            ouput += result[i].TeamName + " | Season " + (Number(result[i].SeasonID) + 1) + "\n";
-        }
-
-        ouput += "```";
-
-
-        client.api.interactions(interactionid, interactiontoken).callback.post({
-            data: {
-                type: 4,
-                data: {
-                    content: ouput
-                }
+            for (var i = 0; i < result.length;i++)
+            {
+                ouput += result[i].TeamName + " | Season " + (Number(result[i].SeasonID) + 1) + "\n";
             }
+    
+            ouput += "```";
+    
+    
+            client.api.interactions(interactionid, interactiontoken).callback.post({
+                data: {
+                    type: 4,
+                    data: {
+                        content: ouput
+                    }
+                }
+            });
+            connection.release();
+            if (err) throw err;
+    
         });
-        //TrashDB.end();
+
 
     });
+    
+    
     //console.log("Connected to TrashDB.");
     
 }
@@ -271,10 +278,18 @@ function IsUser(userId){
 
 function AddOwner(userId){
 
-    TrashDBPool.query("INSERT INTO Owner(OwnerName) VALUES ('" + userId + "')", function (err, result, fields) {
-        if (err) throw err;
-        console.log(JSON.stringify(result));
+    TrashDBPool.getConnection(function(error, connection) {
+        if (error) throw error;
+        connection.query("INSERT INTO Owner(OwnerName) VALUES ('" + userId + "')", function (err, result, fields) {
+            
+            console.log(JSON.stringify(result));
+
+            connection.release();
+            if (err) throw err;
+        });
+
     });
+    
 
 }
 
@@ -303,11 +318,19 @@ function GetCurrentSeasonId()
 {
     return new Promise(function (resolve, reject)
     {
-        TrashDBPool.query("SELECT SeasonID FROM Season ORDER BY isActive DESC LIMIT 1", function (err, result, fields) {
-            if (err) throw err;
-            console.log(JSON.stringify(result));
-            resolve(Number(result[0].SeasonID));
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+
+            connection.query("SELECT SeasonID FROM Season ORDER BY isActive DESC LIMIT 1", function (err, result, fields) {
+                
+                console.log(JSON.stringify(result));
+                resolve(Number(result[0].SeasonID));
+                connection.release();
+                if (err) throw err;
+                
+            });
         });
+        
 
     });
 }
@@ -316,24 +339,39 @@ function HasTeam(userId, currentSeason)
 {
     return new Promise(function (resolve, reject)
     {
-        TrashDBPool.query("SELECT TeamID, SeasonID FROM Team JOIN Owner ON Team.OwnerID = Owner.OwnerID WHERE OwnerName = '" + userId + "' ORDER BY SeasonID DESC LIMIT 1", function (err, result, fields) {
-            if (err) throw err;
-            console.log(JSON.stringify(result));
-            if (result.length == 0){
-                resolve(false);
-            }
-            else
-                resolve(Number(result[0].SeasonID) == currentSeason);
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            connection.query("SELECT TeamID, SeasonID FROM Team JOIN Owner ON Team.OwnerID = Owner.OwnerID WHERE OwnerName = '" + userId + "' ORDER BY SeasonID DESC LIMIT 1", function (err, result, fields) {
+                
+                console.log(JSON.stringify(result));
+                if (result.length == 0){
+                    resolve(false);
+                }
+                else
+                {
+                    resolve(Number(result[0].SeasonID) == currentSeason);
+                }
+                connection.release();
+                if (err) throw err;
+                
+            });
         });
+        
 
     });
 }
 
 function CreateTeam(ownerName, season, teamName){
     
-    TrashDBPool.query("INSERT INTO Team(TeamName,SeasonID,OwnerID) SELECT '" + teamName + "', '" + season + "', OwnerID FROM Owner WHERE OwnerName = '" + ownerName + "'", function (err, result, fields) {
-        if (err) throw err;
-        console.log(JSON.stringify(result));
+    TrashDBPool.getConnection(function(error, connection) {
+        if (error) throw error;
+        connection.query("INSERT INTO Team(TeamName,SeasonID,OwnerID) SELECT '" + teamName + "', '" + season + "', OwnerID FROM Owner WHERE OwnerName = '" + ownerName + "'", function (err, result, fields) {
+            
+            console.log(JSON.stringify(result));
+            connection.release();
+            if (err) throw err;
+        });
     });
+    
 }
 
