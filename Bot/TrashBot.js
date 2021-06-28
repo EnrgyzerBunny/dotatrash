@@ -23,15 +23,25 @@ else
 }
 
 //DB refrence
-const TrashDB = mysql.createConnection({
+/*const TrashDB = mysql.createConnection({
     host: "localhost",
     user: "trashbot",
     password: "password",
     database: "EnrgyzerBunny_Collider"
 });
 
-TrashDB.connect();
-console.log("TrashDB Connected.");
+TrashDB.connect();*/
+
+//DB pooling
+const TrashDBPool = mysql.createPool({
+    connectionLimit: 10,
+    host: "localhost",
+    user: "trashbot",
+    password: "password",
+    database: "EnrgyzerBunny_Collider"
+
+});
+console.log("TrashDBPool Created.");
 
 
 
@@ -71,6 +81,7 @@ client.on('ready', () => {
 
     //Discord Global Level Command Registration ---------------------------------------------------
 
+    /* -- command registration should be maintained at API level and not called by bot
     client.api.applications(client.user.id).commands.post({
         data: {
             name: "join",
@@ -94,7 +105,7 @@ client.on('ready', () => {
             ]
         }
     });
-
+*/ 
 
     client.ws.on('INTERACTION_CREATE', async interaction => {
         const command = interaction.data.name.toLowerCase();
@@ -218,7 +229,7 @@ function PullTeams(interactionid, interactiontoken)
 {
     
     
-    TrashDB.query("SELECT * FROM Team", function (err, result, fields) {
+    TrashDBPool.query("SELECT * FROM Team", function (err, result, fields) {
         if (err) throw err;
         console.log(JSON.stringify(result));
 
@@ -260,7 +271,7 @@ function IsUser(userId){
 
 function AddOwner(userId){
 
-    TrashDB.query("INSERT INTO Owner(OwnerName) VALUES ('" + userId + "')", function (err, result, fields) {
+    TrashDBPool.query("INSERT INTO Owner(OwnerName) VALUES ('" + userId + "')", function (err, result, fields) {
         if (err) throw err;
         console.log(JSON.stringify(result));
     });
@@ -292,7 +303,7 @@ function GetCurrentSeasonId()
 {
     return new Promise(function (resolve, reject)
     {
-        TrashDB.query("SELECT SeasonID FROM Season ORDER BY isActive DESC LIMIT 1", function (err, result, fields) {
+        TrashDBPool.query("SELECT SeasonID FROM Season ORDER BY isActive DESC LIMIT 1", function (err, result, fields) {
             if (err) throw err;
             console.log(JSON.stringify(result));
             resolve(Number(result[0].SeasonID));
@@ -305,7 +316,7 @@ function HasTeam(userId, currentSeason)
 {
     return new Promise(function (resolve, reject)
     {
-        TrashDB.query("SELECT TeamID, SeasonID FROM Team JOIN Owner ON Team.OwnerID = Owner.OwnerID WHERE OwnerName = '" + userId + "' ORDER BY SeasonID DESC LIMIT 1", function (err, result, fields) {
+        TrashDBPool.query("SELECT TeamID, SeasonID FROM Team JOIN Owner ON Team.OwnerID = Owner.OwnerID WHERE OwnerName = '" + userId + "' ORDER BY SeasonID DESC LIMIT 1", function (err, result, fields) {
             if (err) throw err;
             console.log(JSON.stringify(result));
             if (result.length == 0){
@@ -320,7 +331,7 @@ function HasTeam(userId, currentSeason)
 
 function CreateTeam(ownerName, season, teamName){
     
-    TrashDB.query("INSERT INTO Team(TeamName,SeasonID,OwnerID) SELECT '" + teamName + "', '" + season + "', OwnerID FROM Owner WHERE OwnerName = '" + ownerName + "'", function (err, result, fields) {
+    TrashDBPool.query("INSERT INTO Team(TeamName,SeasonID,OwnerID) SELECT '" + teamName + "', '" + season + "', OwnerID FROM Owner WHERE OwnerName = '" + ownerName + "'", function (err, result, fields) {
         if (err) throw err;
         console.log(JSON.stringify(result));
     });
