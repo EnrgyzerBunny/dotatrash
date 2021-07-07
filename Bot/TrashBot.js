@@ -9,6 +9,20 @@ const guild_id = require("./guild.json")
 //server refs
 const SERVER_ID = '220670947479257088';
 
+//hacky enums
+const DRAFT_MODE_OFF = 0;
+const DRAFT_MODE_INIT = 1;
+const DRAFT_MODE_MAIN = 2;
+const DRAFT_MODE_RESOLVE = 3;
+
+//mode vars
+var DRAFT_MODE = DRAFT_MODE_OFF;
+
+var DRAFT_ORDER = null;
+var DRAFT_TURN_INDEX = 0;
+var DRAFT_ROUNDS_LIMIT = 0;
+var DRAFT_ROUNDS_COUNT = 0;
+
 // user mapping
 var userMap;
 if (fs.existsSync('data/userMapping.json')){
@@ -51,7 +65,7 @@ client.on('ready', () => {
 
     console.log("Client Initiated.");
 
-    
+    /*
     //Discord Guild Level Command Registration ---------------------------------------------------
     client.api.applications(client.user.id).guilds(guild_id.id).commands.post({
         data: {
@@ -61,7 +75,7 @@ client.on('ready', () => {
         }
     });
 
-    /*
+    
     client.api.applications(client.user.id).guilds(guild_id.id).commands.post({
         data: {
             name: "join",
@@ -192,6 +206,7 @@ client.on('ready', () => {
             {
                 if (args[i].name == "name"){
                     teamName = args[i].value.replace('\''||';'||'"','');
+                    break;
                 }
             }
 
@@ -220,6 +235,46 @@ client.on('ready', () => {
                 }
             });
         }
+
+        if (command === 'draftorder') {
+            let subCommand = args[0].name;
+
+            if (subCommand == "list")
+            {
+                let draftList = await GetDraftList();
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: draftList
+                        }
+                    }
+                });
+
+                return;
+            }
+            else if (subCommand == "set") {
+                let order = args[0].options[0].value;
+                DRAFT_ORDER = order.replace(" ","").split(',');
+                order = "";
+                for (var i = 0; i < DRAFT_ORDER.length;i++) {
+                    order += ((i > 0)? "," : "") + DRAFT_ORDER[i];
+                }
+
+                let output = "Draft order set to:\n```\n" + order + "\n```";
+
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: output
+                        }
+                    }
+                });
+                return;
+            }
+            
+        }
     });
 });
 
@@ -234,21 +289,21 @@ function PullTeams(interactionid, interactiontoken)
             
             console.log(JSON.stringify(result));
     
-            let ouput = "```\n";
+            let output = "```\n";
     
             for (var i = 0; i < result.length;i++)
             {
-                ouput += result[i].TeamName + " | Season " + (Number(result[i].SeasonID) + 1) + "\n";
+                output += result[i].TeamName + " | Season " + (Number(result[i].SeasonID) + 1) + "\n";
             }
     
-            ouput += "```";
+            output += "```";
     
     
             client.api.interactions(interactionid, interactiontoken).callback.post({
                 data: {
                     type: 4,
                     data: {
-                        content: ouput
+                        content: output
                     }
                 }
             });
@@ -373,5 +428,30 @@ function CreateTeam(ownerName, season, teamName){
         });
     });
     
+}
+
+function GetDraftList() {
+
+    return new Promise(function (resolve, reject)
+    {
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            connection.query("SELECT Owner.OwnerID, Owner.OwnerName FROM Owner JOIN Team ON Owner.OwnerID = Team.OwnerID WHERE Team.SeasonID = (SELECT SeasonID FROM Season ORDER BY isActive DESC LIMIT 1)", async function (err, result, fields) {
+                
+                let output = "```\n"
+                for (var i = 0; i < result.length;i++)
+                {
+                    let nick = await client.guilds.cache.get(SERVER_ID).members.fetch(result[i].OwnerName);                    
+                    output += result[i].OwnerID + " | " + nick.displayName + "\n";
+                }
+                output += "```";
+
+                resolve(output);
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
 }
 
