@@ -23,6 +23,11 @@ var DRAFT_TURN_INDEX = 0;
 var DRAFT_ROUNDS_LIMIT = 0;
 var DRAFT_ROUNDS_COUNT = 0;
 
+//timer message
+var timerMessage = null;
+var timerCount = 0;
+var currentTimer = null;
+
 // user mapping
 var userMap;
 if (fs.existsSync('data/userMapping.json')){
@@ -275,6 +280,29 @@ client.on('ready', () => {
             }
             
         }
+
+        if (command === 'timer') {
+            var length = args[0].value;
+            
+            client.api.interactions(interaction.id, interaction.token).callback.post({
+                data: {
+                    type: 4,
+                    data: {
+                        content: "Timer Created",
+                        flags: 64
+                    }
+                }
+            });
+
+            timerCount = length;
+            timerMessage = await client.guilds.cache.get(interaction.guild_id).channels.cache.get(interaction.channel_id).send("```\n" + millisecondsToTime(length) + "\n```");
+            if (currentTimer != null)
+            {
+                clearInterval(currentTimer);
+                currentTimer = null;
+            }
+            currentTimer = SetTimer(5000,() => UpdateDraftTimer(5000));
+        }
     });
 });
 
@@ -455,3 +483,41 @@ function GetDraftList() {
     });
 }
 
+function SetTimer(tickrate, updateFunc) {
+    return setInterval(updateFunc,tickrate);
+}
+
+function UpdateDraftTimer(tickrate) {
+    
+    timerCount-=tickrate;
+    if (timerCount <= 0)
+    {
+        if (currentTimer != null)
+        {
+            clearInterval(currentTimer);
+            currentTimer = null;
+            timerMessage.edit("Time's up");
+            //call end func
+            return;
+        }
+    }
+
+    var output = "```\n" + millisecondsToTime(timerCount) + "\n```";
+    
+
+    timerMessage.edit(output);
+}
+
+function millisecondsToTime(ms) {
+    const seconds = Math.floor((ms / 1000) % 60);
+    const minutes = Math.floor((ms / 1000 / 60) % 60);
+    const hours = Math.floor((ms  / 1000 / 3600 ) % 24)
+  
+    const formatted = [
+        hours.toString().padStart(2,'0'),
+        minutes.toString().padStart(2,'0'),
+        seconds.toString().padStart(2,'0')
+    ].join(':');
+  
+    return formatted;
+}
