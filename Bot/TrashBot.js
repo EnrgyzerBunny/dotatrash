@@ -19,9 +19,14 @@ const DRAFT_MODE_RESOLVE = 3;
 var DRAFT_MODE = DRAFT_MODE_OFF;
 
 var DRAFT_ORDER = null;
-var DRAFT_TURN_INDEX = 0;
-var DRAFT_ROUNDS_LIMIT = 0;
+var DRAFT_TURN_INDEX = -1;
+var DRAFT_ROUNDS_LIMIT = 7; //How many draft rounds
 var DRAFT_ROUNDS_COUNT = 0;
+var DRAFT_CURRENT_PICK = null;
+var DRAFT_INIT_TIMER = 5; //in min
+var DRAFT_ROUND_TIMER = 2; //in min
+var DRAFT_PLAYERS = null;
+var DRAFT_USER_TEAMS = null;
 
 //timer message
 var timerMessage = null;
@@ -294,14 +299,179 @@ client.on('ready', () => {
                 }
             });
 
-            timerCount = length;
-            timerMessage = await client.guilds.cache.get(interaction.guild_id).channels.cache.get(interaction.channel_id).send("```\n" + millisecondsToTime(length) + "\n```");
             if (currentTimer != null)
             {
+                timerMessage.edit("Stopped");
                 clearInterval(currentTimer);
                 currentTimer = null;
             }
-            currentTimer = SetTimer(5000,() => UpdateDraftTimer(5000));
+            timerCount = length;
+            timerMessage = await client.guilds.cache.get(interaction.guild_id).channels.cache.get(interaction.channel_id).send("```\n" + millisecondsToTime(length) + "\n```");
+            
+            currentTimer = SetTimer(5000,() => UpdateDraftTimer(5000,() => {}));
+        }
+
+        if (command === 'draft') {
+            
+            if (args != null && args[0] != null && args[0].value == "true")
+            {
+                //set order to random
+                DRAFT_ORDER = await GetDraftListIDs();
+                shuffle(DRAFT_ORDER);
+            }
+            else if (DRAFT_ORDER == null)
+            {
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: "Draft order not set. Please use /draftorder or set randomized to true.",
+                            flags: 64
+                        }
+                    }
+                });
+                return;
+            }
+
+            client.api.interactions(interaction.id, interaction.token).callback.post({
+                data: {
+                    type: 4,
+                    data: {
+                        content: "Starting Draft Mode",
+                        flags: 64
+                    }
+                }
+            });
+
+            DRAFT_MODE = DRAFT_MODE_INIT;
+
+            client.guilds.cache.get(interaction.guild_id).channels.cache.get(interaction.channel_id).send("```\nDraft Mode: Spooling up\n```");
+            DRAFT_PLAYERS = await GetFreeAgents();
+            DRAFT_USER_TEAMS = await GetUserTeams();
+            client.guilds.cache.get(interaction.guild_id).channels.cache.get(interaction.channel_id).send("```\nDraft Mode: Starting in " + DRAFT_INIT_TIMER + " min\n```");
+
+            
+            if (currentTimer != null)
+            {
+                timerMessage.edit("Stopped");
+                clearInterval(currentTimer);
+                currentTimer = null;
+            }
+            timerCount = 1000 * 60 * DRAFT_INIT_TIMER;
+            timerMessage = await client.guilds.cache.get(interaction.guild_id).channels.cache.get(interaction.channel_id).send("```\n" + millisecondsToTime(timerCount) + "\n```");
+            
+            DRAFT_TURN_INDEX = -1;
+            DRAFT_ROUNDS_COUNT = 0;
+            currentTimer = SetTimer(5000,() => UpdateDraftTimer(5000,() => NextDraftTurn(interaction.guild_id,interaction.channel_id)));
+            
+
+        }
+
+        if (command === 'pick') {
+
+            if (DRAFT_MODE != DRAFT_MODE_MAIN)
+            {
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: "No draft running."
+                        }
+                    }
+                });
+                return;
+            }
+
+            var userTeam = null;
+            for (var i = 0; i < DRAFT_USER_TEAMS.length; i++)
+            {
+                if (user.id == DRAFT_USER_TEAMS[i].user)
+                {
+                    userTeam = DRAFT_USER_TEAMS[i];
+                }
+            }
+
+            if (userTeam == null) {
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: "You are not in the draft."
+                        }
+                    }
+                });
+                return;
+            }
+
+            //check if user is current active draft user
+            if (DRAFT_ORDER[DRAFT_TURN_INDEX] != userTeam.ownerID) {
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: "It is not your turn."
+                        }
+                    }
+                });
+                return;
+            }
+
+            var playerID = args[0].value;
+            var player = null;
+
+            for (var i = 0; i < DRAFT_PLAYERS.length; i++)
+            {
+                if (DRAFT_PLAYERS[i].id == playerID)
+                {
+                    player = DRAFT_PLAYERS[i];
+                    break;
+                }
+            }
+
+            if (player == null) {
+                var errOutput = "Invalid pick: Player " + playerID + " does not exist";
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: errOutput
+                        }
+                    }
+                });
+                return;
+            }
+
+            playerName = player.name;
+
+            if (player.drafted) {
+                var errOutput = "Invalid pick: Player " + playerID + " | " + playerName + " has already been drafted";
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: errOutput
+                        }
+                    }
+                });
+                return;
+            }
+
+            
+
+            DRAFT_CURRENT_PICK = player;
+
+
+
+            var output = interaction.member.nick + " has selected " + playerID + " | " + playerName;
+            client.api.interactions(interaction.id, interaction.token).callback.post({
+                data: {
+                    type: 4,
+                    data: {
+                        content: output
+                    }
+                }
+            });
+            return;
         }
     });
 });
@@ -483,11 +653,34 @@ function GetDraftList() {
     });
 }
 
+function GetDraftListIDs() {
+
+    return new Promise(function (resolve, reject)
+    {
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            connection.query("SELECT Owner.OwnerID, Owner.OwnerName FROM Owner JOIN Team ON Owner.OwnerID = Team.OwnerID WHERE Team.SeasonID = (SELECT SeasonID FROM Season ORDER BY isActive DESC LIMIT 1)", async function (err, result, fields) {
+                
+                let output = new Array();
+                for (var i = 0; i < result.length;i++)
+                {
+                    output.push(result[i].OwnerID);
+                }
+
+                resolve(output);
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
 function SetTimer(tickrate, updateFunc) {
     return setInterval(updateFunc,tickrate);
 }
 
-function UpdateDraftTimer(tickrate) {
+function UpdateDraftTimer(tickrate,callback) {
     
     timerCount-=tickrate;
     if (timerCount <= 0)
@@ -496,8 +689,9 @@ function UpdateDraftTimer(tickrate) {
         {
             clearInterval(currentTimer);
             currentTimer = null;
-            timerMessage.edit("Time's up");
-            //call end func
+            timerMessage.edit("```Time's up```");
+            timerMessage = null;
+            callback();
             return;
         }
     }
@@ -520,4 +714,193 @@ function millisecondsToTime(ms) {
     ].join(':');
   
     return formatted;
+}
+
+async function NextDraftTurn(guild_id,channel_id) {
+
+
+    //if this isnt the first time run then apply pick
+    if (DRAFT_TURN_INDEX != -1) {
+        ApplyPick(guild_id,channel_id);
+    }
+
+    DRAFT_MODE = DRAFT_MODE_MAIN;
+    //increment turns
+    DRAFT_TURN_INDEX++;
+
+    if (DRAFT_TURN_INDEX >= DRAFT_ORDER.length)
+    {
+        DRAFT_TURN_INDEX = 0;
+        DRAFT_ROUNDS_COUNT++;
+    }
+
+    if (DRAFT_ROUNDS_COUNT >= DRAFT_ROUNDS_LIMIT) {
+        //Draft over
+        DRAFT_MODE = DRAFT_MODE_RESOLVE;
+
+        client.guilds.cache.get(guild_id).channels.cache.get(channel_id).send("```//TODO: End of Draft Function```");
+        //TODO: call end of draft func
+        return;
+    }
+
+    var currentUser = null;
+    for (var i = 0;i < DRAFT_USER_TEAMS.length;i++) {
+        if (Number(DRAFT_USER_TEAMS[i].ownerID) == Number(DRAFT_ORDER[DRAFT_TURN_INDEX])) {
+            currentUser = DRAFT_USER_TEAMS[i];
+        }
+    }
+
+    if (currentUser == null) {
+        client.guilds.cache.get(guild_id).channels.cache.get(channel_id).send("Error - Invalid OwnerID in draft order... Aborting draft mode.");
+        return;
+    }
+
+    //message @ing current turn owner - include round number
+    client.guilds.cache.get(guild_id).channels.cache.get(channel_id).send("```Round " + (DRAFT_ROUNDS_COUNT + 1) + 
+        ":```<@!"+ currentUser.user + "> It is your turn you have " + DRAFT_ROUND_TIMER + " min to pick with the /pick command");
+
+    if (currentTimer != null)
+    {
+        timerMessage.edit("Stopped");
+        clearInterval(currentTimer);
+        currentTimer = null;
+    }
+    timerCount = 1000 * 60 * DRAFT_ROUND_TIMER;
+    timerMessage = await client.guilds.cache.get(guild_id).channels.cache.get(channel_id).send("```\n" + millisecondsToTime(timerCount) + "\n```");
+    
+    currentTimer = SetTimer(5000,() => UpdateDraftTimer(5000,() => NextDraftTurn(guild_id,channel_id)));
+
+}
+
+function GetFreeAgents()
+{
+    return new Promise(function (resolve, reject)
+    {
+        var freeAgents = new Array();
+
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            connection.query("SELECT Player.PlayerID, Player.PlayerName, Player.FantasyRole, ProTeam.ProTeamName FROM Player JOIN ProTeam ON Player.ProTeamID = ProTeam.ProTeamID WHERE Player.FantasyTeamID = 0", function (err, result, fields) {
+                
+                for (var i = 0; i < result.length; i++) {
+                    let player = {
+                        id: result[i].PlayerID,
+                        name: result[i].PlayerName,
+                        role: result[i].FantasyRole,
+                        team: result[i].ProTeamName,
+                        drafted: false
+                    };
+                    freeAgents.push(player);
+                }
+                
+
+                resolve(freeAgents);
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
+function GetUserTeams() {
+    return new Promise(function (resolve, reject)
+    {
+        var userTeams = new Array();
+
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            connection.query("SELECT TeamName, OwnerName, Owner.OwnerID FROM Team JOIN Owner ON Team.OwnerID = Owner.OwnerID WHERE Team.SeasonID = (SELECT SeasonID FROM Season ORDER BY isActive DESC LIMIT 1)", function (err, result, fields) {
+                
+                for (var i = 0; i < result.length; i++) {
+                    let userTeam = {
+                        user: result[i].OwnerName,
+                        team: result[i].TeamName,
+                        ownerID: result[i].OwnerID,
+                        picks: new Array()
+                    };
+                    userTeams.push(userTeam);
+                }
+                
+
+                resolve(userTeams);
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
+function ApplyPick(guild_id,channel_id) {
+
+    var currentUser = null;
+    for (var i = 0;i < DRAFT_USER_TEAMS.length;i++) {
+        if (Number(DRAFT_USER_TEAMS[i].ownerID) == Number(DRAFT_ORDER[DRAFT_TURN_INDEX])) {
+            currentUser = DRAFT_USER_TEAMS[i];
+        }
+    }
+
+    if (currentUser == null) {
+        client.guilds.cache.get(guild_id).channels.cache.get(channel_id).send("Error - Invalid OwnerID in draft order... Aborting draft mode.");
+        return;
+    }
+
+    if (DRAFT_CURRENT_PICK == null) {
+
+        client.guilds.cache.get(guild_id).channels.cache.get(channel_id).send("No pick set - assigning random pick.");
+        //random if none picked
+        var available = new Array();
+        for (var i = 0; i < DRAFT_PLAYERS.length;i++)
+        {
+            if (DRAFT_PLAYERS[i].drafted == false) {
+                available.push(DRAFT_PLAYERS[i]);
+            }
+        }
+
+        shuffle(available);
+
+        if (available.length <= 0)
+        {
+            client.guilds.cache.get(guild_id).channels.cache.get(channel_id).send("Error - No available players left to assign.");
+            return;
+        }
+        DRAFT_CURRENT_PICK = available[0];
+    }
+
+    client.guilds.cache.get(guild_id).channels.cache.get(channel_id).send("<@!"+ currentUser.user + "> has drafted "
+        + DRAFT_CURRENT_PICK.id + " | " + DRAFT_CURRENT_PICK.name);
+
+        //set player in list to drafted
+        for (var i = 0; i < DRAFT_PLAYERS.length; i++)
+            {
+                if (DRAFT_PLAYERS[i].id == DRAFT_CURRENT_PICK.id)
+                {
+                    DRAFT_PLAYERS[i].drafted = true;
+                    break;
+                }
+            }
+
+        //add pick to userteam entry
+        for (var i = 0;i < DRAFT_USER_TEAMS.length;i++) {
+            if (Number(DRAFT_USER_TEAMS[i].ownerID) == Number(currentUser.ownerID)) {
+                DRAFT_USER_TEAMS[i].picks.push(DRAFT_CURRENT_PICK.id);
+                console.log("Applied pick:\n" + JSON.stringify(DRAFT_USER_TEAMS[i]));
+                break;
+            }
+        }
+
+        DRAFT_CURRENT_PICK = null;
+
+}
+
+function shuffle(a) {
+    var j, x, i;
+    for (i = a.length - 1; i > 0; i--) {
+        j = Math.floor(Math.random() * (i + 1));
+        x = a[i];
+        a[i] = a[j];
+        a[j] = x;
+    }
+    return a;
 }
