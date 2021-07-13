@@ -4,7 +4,8 @@ const mysql = require('mysql');
 
 const client = new Discord.Client();
 const token = require("./token.json")
-const guild_id = require("./guild.json")
+const guild_id = require("./guild.json");
+const { off } = require('process');
 
 //server refs
 const SERVER_ID = '220670947479257088';
@@ -473,6 +474,30 @@ client.on('ready', () => {
             });
             return;
         }
+
+        if (command === 'freeagents') {
+
+            var page = 1;
+
+            if (args != null && args[0] != null)
+            {
+                page = args[0].value;
+            }
+
+            var freeAgents = await GetFreeAgentsPrint(page);
+
+            client.api.interactions(interaction.id, interaction.token).callback.post({
+                data: {
+                    type: 4,
+                    data: {
+                        content: freeAgents,
+                        flags: 64
+                    }
+                }
+            });
+
+            return;
+        }
     });
 });
 
@@ -801,6 +826,79 @@ function GetFreeAgents()
             });
         });
     });
+}
+
+function GetFreeAgentsPrint(page) {
+
+    var limit = 35;
+    var offset = (page - 1) * limit;
+    var filterIDs = (DRAFT_MODE == DRAFT_MODE_MAIN)? GetDraftFilter() : null;
+    var draftFilter = (filterIDs != null)? " AND Player.PlayerID NOT IN (" + GetDraftFilter() + ")" : "";
+    return new Promise(function (resolve, reject)
+    {
+        var formattedOutput = "```Page: " + page + "\n";
+
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            connection.query("SELECT Player.PlayerID, Player.PlayerName, Player.FantasyRole, ProTeam.ProTeamName FROM Player JOIN ProTeam ON Player.ProTeamID = ProTeam.ProTeamID WHERE Player.FantasyTeamID = 0" + draftFilter + " ORDER BY ProTeam.ProTeamID ASC, Player.FantasyRole ASC LIMIT " + offset + "," + limit, function (err, result, fields) {
+                
+                for (var i = 0; i < result.length; i++) {
+                   
+
+                    formattedOutput+= result[i].PlayerID.toString().padStart(3," ") + " | ";
+                    formattedOutput+= result[i].PlayerName.toString().padStart(15," ") + " | ";
+                    formattedOutput+= result[i].ProTeamName.toString().padStart(16," ") + " | ";
+
+                    var role;
+                    switch(result[i].FantasyRole) {
+                        case (1):
+                            role = "Core";
+                            break;
+                        case (2):
+                            role = "Support";
+                            break;
+                        case (4):
+                            role = "Mid";
+                            break;
+                        default:
+                            role = "Unknown";
+                            break;
+
+                    }
+
+                    formattedOutput+= role.toString().padStart(7," ") + "\n";
+                    
+
+                    
+                }
+                
+                formattedOutput += "```";
+
+                resolve(formattedOutput);
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
+function GetDraftFilter() {
+    var drafted = new Array();
+
+    for (var i = 0;i < DRAFT_PLAYERS.length;i++) {
+        if (DRAFT_PLAYERS[i].drafted == true) {
+            drafted.push(DRAFT_PLAYERS[i].id);
+        }
+    }
+
+    if (drafted.length <= 0)
+    {
+        return null;
+    }
+
+    return drafted.join(",");
+
 }
 
 function GetUserTeams() {
