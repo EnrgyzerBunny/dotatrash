@@ -21,10 +21,10 @@ var DRAFT_MODE = DRAFT_MODE_OFF;
 
 var DRAFT_ORDER = null;
 var DRAFT_TURN_INDEX = -1;
-var DRAFT_ROUNDS_LIMIT = 7; //How many draft rounds
+var DRAFT_ROUNDS_LIMIT = 2; //How many draft rounds
 var DRAFT_ROUNDS_COUNT = 0;
 var DRAFT_CURRENT_PICK = null;
-var DRAFT_INIT_TIMER = 5; //in min
+var DRAFT_INIT_TIMER = 1; //in min
 var DRAFT_ROUND_TIMER = 2; //in min
 var DRAFT_PLAYERS = null;
 var DRAFT_USER_TEAMS = null;
@@ -65,7 +65,8 @@ const TrashDBPool = mysql.createPool({
     host: "localhost",
     user: "trashbot",
     password: "password",
-    database: "EnrgyzerBunny_Collider"
+    database: "EnrgyzerBunny_Collider",
+    multipleStatements: true
 
 });
 console.log("TrashDBPool Created.");
@@ -588,6 +589,41 @@ client.on('ready', () => {
             
 
         }
+
+        if (command === 'pushdraft') {
+
+            if (DRAFT_MODE != DRAFT_MODE_RESOLVE)
+            {
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: "Draft not in correct phase",
+                            flags: 64
+                        }
+                    }
+                });
+            }
+
+            ApplyDraftResults();
+            DRAFT_MODE = DRAFT_MODE_OFF;
+            DRAFT_ORDER = null;
+            DRAFT_USER_TEAMS = null;
+            DRAFT_TURN_INDEX = -1;
+            DRAFT_ROUNDS_COUNT = 0;
+            DRAFT_GUILD_ID = null;
+            DRAFT_CHANNEL_ID = null;
+
+            client.api.interactions(interaction.id, interaction.token).callback.post({
+                data: {
+                    type: 4,
+                    data: {
+                        content: "Draft Applied",
+                        flags: 64
+                    }
+                }
+            });
+        }
     });
 });
 
@@ -853,8 +889,7 @@ async function NextDraftTurn(guild_id,channel_id) {
         //Draft over
         DRAFT_MODE = DRAFT_MODE_RESOLVE;
 
-        client.guilds.cache.get(guild_id).channels.cache.get(channel_id).send("```//TODO: End of Draft Function```");
-        //TODO: call end of draft func
+        DraftEnd(guild_id,channel_id);
         return;
     }
 
@@ -936,8 +971,8 @@ function GetFreeAgentsPrint(page) {
                    
 
                     formattedOutput+= result[i].PlayerID.toString().padStart(3," ") + " | ";
-                    formattedOutput+= result[i].PlayerName.toString().padStart(15," ") + " | ";
-                    formattedOutput+= result[i].ProTeamName.toString().padStart(16," ") + " | ";
+                    formattedOutput+= result[i].PlayerName.toString().padEnd(15," ") + " | ";
+                    formattedOutput+= result[i].ProTeamName.toString().padEnd(16," ") + " | ";
 
                     var role;
                     switch(result[i].FantasyRole) {
@@ -956,7 +991,7 @@ function GetFreeAgentsPrint(page) {
 
                     }
 
-                    formattedOutput+= role.toString().padStart(7," ") + "\n";
+                    formattedOutput+= role.toString().padEnd(7," ") + "\n";
                     
 
                     
@@ -998,13 +1033,14 @@ function GetUserTeams() {
 
         TrashDBPool.getConnection(function(error, connection) {
             if (error) throw error;
-            connection.query("SELECT TeamName, OwnerName, Owner.OwnerID FROM Team JOIN Owner ON Team.OwnerID = Owner.OwnerID WHERE Team.SeasonID = (SELECT SeasonID FROM Season ORDER BY isActive DESC LIMIT 1)", function (err, result, fields) {
+            connection.query("SELECT TeamName, OwnerName, Owner.OwnerID, TeamID FROM Team JOIN Owner ON Team.OwnerID = Owner.OwnerID WHERE Team.SeasonID = (SELECT SeasonID FROM Season ORDER BY isActive DESC LIMIT 1)", function (err, result, fields) {
                 
                 for (var i = 0; i < result.length; i++) {
                     let userTeam = {
                         user: result[i].OwnerName,
                         team: result[i].TeamName,
                         ownerID: result[i].OwnerID,
+                        teamID: result[i].TeamID,
                         picks: new Array()
                     };
                     userTeams.push(userTeam);
@@ -1079,6 +1115,97 @@ function ApplyPick(guild_id,channel_id) {
         }
 
         DRAFT_CURRENT_PICK = null;
+
+}
+
+function DraftEnd(guild_id,channel_id) {
+    client.guilds.cache.get(guild_id).channels.cache.get(channel_id).send("Draft Completed - Displaying Results:");
+
+    
+    for (var i = 0; i < DRAFT_USER_TEAMS.length; i++) {
+        if (DRAFT_USER_TEAMS[i].picks.length <= 0) {
+            continue;
+        }
+        var output = "```\n";
+        output+= DRAFT_USER_TEAMS[i].team + ":\n";
+        output+= String("ID").padStart(3," ") + "|" +
+            String("Player").padEnd(14," ") + "|" +
+            String("Role").padEnd(7," ") + "|" +
+            String("ProTeam").padEnd(12," ") + "\n";
+        output += "----------------------------------------\n";
+
+        for (var x = 0; x < DRAFT_USER_TEAMS[i].picks.length;x++) {
+            let player = GetCachedPlayerInfo(DRAFT_USER_TEAMS[i].picks[x]);
+            if (player != null) {
+
+                var role;
+                    switch(player.role) {
+                        case (1):
+                            role = "Core";
+                            break;
+                        case (2):
+                            role = "Support";
+                            break;
+                        case (4):
+                            role = "Mid";
+                            break;
+                        default:
+                            role = "Unknown";
+                            break;
+
+                    }
+
+                output += player.id.toString().padStart(3," ") + "|" +
+                player.name.toString().padEnd(14," ") + "|" + 
+                role.padEnd(7," ") + "|" +
+                player.team.toString().padEnd(12," ") + "\n";
+            }
+
+        }
+        output += "```";
+        client.guilds.cache.get(guild_id).channels.cache.get(channel_id).send(output);
+    }
+
+    client.guilds.cache.get(guild_id).channels.cache.get(channel_id).send("Draft admins can apply draft to DB with /pushdraft");
+
+}
+
+function ApplyDraftResults() {
+
+    var query = "";
+    for (var i = 0; i < DRAFT_USER_TEAMS.length; i++) {
+        if (DRAFT_USER_TEAMS[i].picks.length <= 0) {
+            continue;
+        }
+        query += "UPDATE Player SET FantasyTeamID = " + DRAFT_USER_TEAMS[i].teamID + " WHERE PlayerID IN (" + DRAFT_USER_TEAMS[i].picks.join(",") + ")" +";";
+        
+
+    }
+
+    query = query.slice(0,-1);
+
+    TrashDBPool.getConnection(function(error, connection) {
+        if (error) throw error;
+        connection.query(query, function (err, result, fields) {
+            
+            console.log(JSON.stringify(result));
+            connection.release();
+            if (err) throw err;
+        });
+    });
+     
+
+}
+
+function GetCachedPlayerInfo(playerID) {
+
+    for (var i = 0; i < DRAFT_PLAYERS.length; i++) {
+        if (DRAFT_PLAYERS[i].id == playerID) {
+            return DRAFT_PLAYERS[i];
+        }
+    }
+
+    return null;
 
 }
 
