@@ -28,6 +28,8 @@ var DRAFT_INIT_TIMER = 5; //in min
 var DRAFT_ROUND_TIMER = 2; //in min
 var DRAFT_PLAYERS = null;
 var DRAFT_USER_TEAMS = null;
+var DRAFT_GUILD_ID = null;
+var DRAFT_CHANNEL_ID = null;
 
 //timer message
 var timerMessage = null;
@@ -363,7 +365,9 @@ client.on('ready', () => {
             
             DRAFT_TURN_INDEX = -1;
             DRAFT_ROUNDS_COUNT = 0;
-            currentTimer = SetTimer(5000,() => UpdateDraftTimer(5000,() => NextDraftTurn(interaction.guild_id,interaction.channel_id)));
+            DRAFT_GUILD_ID = interaction.guild_id;
+            DRAFT_CHANNEL_ID = interaction.channel_id;
+            currentTimer = SetTimer(5000,() => UpdateDraftTimer(5000,() => NextDraftTurn(DRAFT_GUILD_ID,DRAFT_CHANNEL_ID)));
             
 
         }
@@ -463,7 +467,7 @@ client.on('ready', () => {
 
 
 
-            var output = interaction.member.nick + " has selected " + playerID + " | " + playerName;
+            var output = interaction.member.nick + " has selected " + playerID + " | " + playerName + "\nUse /confirmpick to lock in and end your turn";
             client.api.interactions(interaction.id, interaction.token).callback.post({
                 data: {
                     type: 4,
@@ -497,6 +501,92 @@ client.on('ready', () => {
             });
 
             return;
+        }
+
+        if (command === 'confirmpick') {
+            if (DRAFT_MODE != DRAFT_MODE_MAIN)
+            {
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: "No draft running."
+                        }
+                    }
+                });
+                return;
+            }
+
+            var userTeam = null;
+            for (var i = 0; i < DRAFT_USER_TEAMS.length; i++)
+            {
+                if (user.id == DRAFT_USER_TEAMS[i].user)
+                {
+                    userTeam = DRAFT_USER_TEAMS[i];
+                }
+            }
+
+            if (userTeam == null) {
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: "You are not in the draft."
+                        }
+                    }
+                });
+                return;
+            }
+
+            //check if user is current active draft user
+            if (DRAFT_ORDER[DRAFT_TURN_INDEX] != userTeam.ownerID) {
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: "It is not your turn."
+                        }
+                    }
+                });
+                return;
+            }
+
+            //check if there is a current pick
+            if (DRAFT_CURRENT_PICK == null) {
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: "No pick is selected."
+                        }
+                    }
+                });
+                return;
+            }
+
+            client.api.interactions(interaction.id, interaction.token).callback.post({
+                data: {
+                    type: 4,
+                    data: {
+                        content: "Pick locked in",
+                        flags: 64
+                    }
+                }
+            });
+
+            //end timer and cycle turn
+            if (currentTimer != null)
+            {
+                clearInterval(currentTimer);
+                currentTimer = null;
+                timerMessage.edit("```Time's up```");
+                timerMessage = null;
+                NextDraftTurn(DRAFT_GUILD_ID,DRAFT_CHANNEL_ID);
+                return;
+            }
+
+            
+
         }
     });
 });
