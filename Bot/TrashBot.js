@@ -5,10 +5,14 @@ const mysql = require('mysql');
 const client = new Discord.Client();
 const token = require("./token.json")
 const guild_id = require("./guild.json");
-const { off } = require('process');
 
 //server refs
 const SERVER_ID = '220670947479257088';
+
+//LEAGUE MASTER SETTINGS ------------
+const ROSTER_CORE_LIMIT = 2;
+const ROSTER_MID_LIMIT = 1;
+const ROSTER_SUP_LIMIT = 2;
 
 //hacky enums
 const DRAFT_MODE_OFF = 0;
@@ -49,16 +53,6 @@ else
     client.users.cache.get('109498432921546752').send("Error: Unable to read user mapping file");
 }
 
-//DB refrence
-/*const TrashDB = mysql.createConnection({
-    host: "localhost",
-    user: "trashbot",
-    password: "password",
-    database: "EnrgyzerBunny_Collider"
-});
-
-TrashDB.connect();*/
-
 //DB pooling
 const TrashDBPool = mysql.createPool({
     connectionLimit: 10,
@@ -79,62 +73,8 @@ client.on('ready', () => {
 
     console.log("Client Initiated.");
 
-    /*
-    //Discord Guild Level Command Registration ---------------------------------------------------
-    client.api.applications(client.user.id).guilds(guild_id.id).commands.post({
-        data: {
-            name: "teams",
-            description: "list season teams"
-            // possible options here e.g. options: [{...}]
-        }
-    });
 
-    
-    client.api.applications(client.user.id).guilds(guild_id.id).commands.post({
-        data: {
-            name: "join",
-            description: "Join the Dota Trash league"
-            // possible options here e.g. options: [{...}]
-        }
-    });
-
-    client.api.applications(client.user.id).guilds(guild_id.id).commands.post({
-        data: {
-            name: "createteam",
-            description: "Create a team for the current season"
-            // possible options here e.g. options: [{...}]
-        }
-    });
-    */
-
-    //Discord Global Level Command Registration ---------------------------------------------------
-
-    /* -- command registration should be maintained at API level and not called by bot
-    client.api.applications(client.user.id).commands.post({
-        data: {
-            name: "join",
-            description: "Join the Dota Trash league"
-            // possible options here e.g. options: [{...}]
-        }
-    });
-
-    client.api.applications(client.user.id).commands.post({
-        data: {
-            name: "createteam",
-            description: "Create a team for the current season",
-            // possible options here e.g. options: [{...}]
-            options: [
-                {
-                    name: "name",
-                    description: "Name of team",
-                    type: 3,
-                    required: true
-                }
-            ]
-        }
-    });
-*/ 
-
+    //Slash Command handling
     client.ws.on('INTERACTION_CREATE', async interaction => {
         const command = interaction.data.name.toLowerCase();
         const args = interaction.data.options;
@@ -151,7 +91,8 @@ client.on('ready', () => {
         }
 
         if (command === 'teams'){ 
-            PullTeams(interaction.id, interaction.token);
+            let currentSeason = await GetCurrentSeasonId();
+            PullTeams(interaction.id, interaction.token,currentSeason);
         }
 
         if (command === 'join'){ 
@@ -624,17 +565,203 @@ client.on('ready', () => {
                 }
             });
         }
+
+        //Active Season Commands - Commands which will be enabled and used only during the main league season
+
+        if (command === 'roster') {
+            let subCommand = args[0].name;
+
+            //initial error handling
+
+            if (!IsUser(user.id)){
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: "You are not in the league.",
+                            flags: 64
+                        }
+                    }
+                });
+                return;
+            }
+            //Verify owner has a team
+            let currentSeason = await GetCurrentSeasonId();
+            if (await !HasTeam(user.id,currentSeason)) {
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: "You do not have a team.",
+                            flags: 64
+                        }
+                    }
+                });
+                return;
+            }
+
+
+            //subcommands
+            if (subCommand === 'list') {
+                let output = await PrintTeamRoster(user.id);
+
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: output,
+                            flags: 64
+                        }
+                    }
+                });
+                return;
+            }
+
+            if (subCommand === 'bench') {
+                let playerId = args[0].options[0].value;
+                
+                let roster = await FetchTeamRoster(user.id);
+                var player = null;
+
+                for (var i = 0; i < roster.length; i++)
+                {
+                    if (roster[i].PlayerID == playerId) {
+                        player = roster[i];
+                        break;
+                    }
+                }
+
+                if (player == null) {
+                    let output = "Error: Player not found on roster."
+
+                    client.api.interactions(interaction.id, interaction.token).callback.post({
+                        data: {
+                            type: 4,
+                            data: {
+                                content: output,
+                                flags: 64
+                            }
+                        }
+                    });
+                    return;
+                }
+
+                if (player.PlayStatus == 0) {
+                    let output = "Error: Player already on bench."
+
+                    client.api.interactions(interaction.id, interaction.token).callback.post({
+                        data: {
+                            type: 4,
+                            data: {
+                                content: output,
+                                flags: 64
+                            }
+                        }
+                    });
+                    return;
+                }
+
+
+                let output = await BenchPlayer(player.PlayerID);
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: output,
+                            flags: 64
+                        }
+                    }
+                });
+                return;
+            }
+
+            if (subCommand === 'play') {
+                let playerId = args[0].options[0].value;
+                
+                let roster = await FetchTeamRoster(user.id);
+                var player = null;
+
+                for (var i = 0; i < roster.length; i++)
+                {
+                    if (roster[i].PlayerID == playerId) {
+                        player = roster[i];
+                        break;
+                    }
+                }
+
+                if (player == null) {
+                    let output = "Error: Player not found on roster."
+
+                    client.api.interactions(interaction.id, interaction.token).callback.post({
+                        data: {
+                            type: 4,
+                            data: {
+                                content: output,
+                                flags: 64
+                            }
+                        }
+                    });
+                    return;
+                }
+
+                if (player.PlayStatus == 1) {
+                    let output = "Error: Player already in active play."
+
+                    client.api.interactions(interaction.id, interaction.token).callback.post({
+                        data: {
+                            type: 4,
+                            data: {
+                                content: output,
+                                flags: 64
+                            }
+                        }
+                    });
+                    return;
+                }
+
+                //check role limit
+                if (IsAtRosterLimit(player.FantasyRole,roster))
+                {
+                    let output = "Error: Too many of this role in active play, bench a player of this role first"
+
+                    client.api.interactions(interaction.id, interaction.token).callback.post({
+                        data: {
+                            type: 4,
+                            data: {
+                                content: output,
+                                flags: 64
+                            }
+                        }
+                    });
+                    return;
+                }
+
+
+                let output = await UnBenchPlayer(player.PlayerID);
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: output,
+                            flags: 64
+                        }
+                    }
+                });
+                return;
+            }
+
+        }
     });
 });
 
 client.login(token.token);
 
-function PullTeams(interactionid, interactiontoken)
+function PullTeams(interactionid, interactiontoken,currentSeason)
 {
     TrashDBPool.getConnection(function(error, connection) {
         if (error) throw error;
 
-        connection.query("SELECT * FROM Team", function (err, result, fields) {
+        connection.query("SELECT * FROM Team WHERE SeasonID = " + currentSeason, function (err, result, fields) {
             
             console.log(JSON.stringify(result));
     
@@ -663,9 +790,6 @@ function PullTeams(interactionid, interactiontoken)
 
 
     });
-    
-    
-    //console.log("Connected to TrashDB.");
     
 }
 
@@ -727,7 +851,7 @@ function GetCurrentSeasonId()
 
             connection.query("SELECT SeasonID FROM Season ORDER BY isActive DESC LIMIT 1", function (err, result, fields) {
                 
-                console.log(JSON.stringify(result));
+                //console.log(JSON.stringify(result));
                 resolve(Number(result[0].SeasonID));
                 connection.release();
                 if (err) throw err;
@@ -747,7 +871,7 @@ function HasTeam(userId, currentSeason)
             if (error) throw error;
             connection.query("SELECT TeamID, SeasonID FROM Team JOIN Owner ON Team.OwnerID = Owner.OwnerID WHERE OwnerName = '" + userId + "' ORDER BY SeasonID DESC LIMIT 1", function (err, result, fields) {
                 
-                console.log(JSON.stringify(result));
+                //console.log(JSON.stringify(result));
                 if (result.length == 0){
                     resolve(false);
                 }
@@ -1209,6 +1333,195 @@ function GetCachedPlayerInfo(playerID) {
 
 }
 
+function PrintTeamRoster(userId) {
+
+    return new Promise(function (resolve, reject)
+    {
+        var formattedOutput = "```\n";
+
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            connection.query("SELECT Team.TeamName, ProTeam.ProTeamName, Player.PlayerID, Player.PlayerName, Player.AccountID, Player.FantasyRole, Player.PlayStatus FROM Player JOIN Team ON Player.FantasyTeamID = Team.TeamID JOIN Owner ON Team.OwnerID = Owner.OwnerID JOIN ProTeam ON Player.ProTeamID = ProTeam.ProTeamID WHERE Owner.OwnerName = " + userId, function (err, result, fields) {
+                
+                if (result.length <= 0)
+                {
+                    return null;
+                }
+
+                var div = "--------------------------------------------------\n";
+                var empty = true;
+                formattedOutput += result[0].TeamName + "\n" +
+                "Core\n" + div;
+
+                //cores loop
+                for (var i = 0; i < result.length; i++) {
+                   if (result[i].PlayStatus != 1 || result[i].FantasyRole != 1) {
+                       continue;
+                   }
+                    formattedOutput+= result[i].PlayerID.toString().padStart(3," ") + " | ";
+                    formattedOutput+= result[i].PlayerName.toString().padEnd(15," ") + " | ";
+                    formattedOutput+= result[i].ProTeamName.toString().padEnd(16," ") + " | ";
+                    formattedOutput+= RoleName(result[i].FantasyRole).padEnd(7," ") + "\n";
+                    empty = false;
+                }
+
+                if (empty) {
+                    formattedOutput += "None\n";
+                }
+                else {
+                    empty = true;
+                }
+
+                formattedOutput += "\n\n" +
+                "Mid\n" + div;
+
+                //mid loop
+                for (var i = 0; i < result.length; i++) {
+                    if (result[i].PlayStatus != 1 || result[i].FantasyRole != 4) {
+                        continue;
+                    }
+                     formattedOutput+= result[i].PlayerID.toString().padStart(3," ") + " | ";
+                     formattedOutput+= result[i].PlayerName.toString().padEnd(15," ") + " | ";
+                     formattedOutput+= result[i].ProTeamName.toString().padEnd(16," ") + " | ";
+                     formattedOutput+= RoleName(result[i].FantasyRole).padEnd(7," ") + "\n";
+                     empty = false;
+                 }
+
+                if (empty) {
+                    formattedOutput += "None\n";
+                }
+                else {
+                    empty = true;
+                }
+
+                 formattedOutput += "\n\n" +
+                "Support\n" + div;
+
+                //Support loop
+                for (var i = 0; i < result.length; i++) {
+                    if (result[i].PlayStatus != 1 || result[i].FantasyRole != 2) {
+                        continue;
+                    }
+                     formattedOutput+= result[i].PlayerID.toString().padStart(3," ") + " | ";
+                     formattedOutput+= result[i].PlayerName.toString().padEnd(15," ") + " | ";
+                     formattedOutput+= result[i].ProTeamName.toString().padEnd(16," ") + " | ";
+                     formattedOutput+= RoleName(result[i].FantasyRole).padEnd(7," ") + "\n";
+                     empty = false;
+                 }
+
+                if (empty) {
+                    formattedOutput += "None\n";
+                }
+                else {
+                    empty = true;
+                }
+
+                 formattedOutput += "\n\n" +
+                "Bench\n" + div;
+
+                //bench loop
+                for (var i = 0; i < result.length; i++) {
+                    if (result[i].PlayStatus != 0) {
+                        continue;
+                    }
+                     formattedOutput+= result[i].PlayerID.toString().padStart(3," ") + " | ";
+                     formattedOutput+= result[i].PlayerName.toString().padEnd(15," ") + " | ";
+                     formattedOutput+= result[i].ProTeamName.toString().padEnd(16," ") + " | ";
+                     formattedOutput+= RoleName(result[i].FantasyRole).padEnd(7," ") + "\n";
+                     empty = false;
+                 }
+
+                if (empty) {
+                    formattedOutput += "None\n";
+                }
+                
+                formattedOutput += "```";
+
+                resolve(formattedOutput);
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+
+}
+
+function FetchTeamRoster(userId) {
+    return new Promise(function (resolve, reject)
+    {
+
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            connection.query("SELECT Team.TeamName, ProTeam.ProTeamName, Player.PlayerID, Player.PlayerName, Player.AccountID, Player.FantasyRole, Player.PlayStatus FROM Player JOIN Team ON Player.FantasyTeamID = Team.TeamID JOIN Owner ON Team.OwnerID = Owner.OwnerID JOIN ProTeam ON Player.ProTeamID = ProTeam.ProTeamID WHERE Owner.OwnerName = " + userId, function (err, result, fields) {
+
+                resolve(result);
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
+function BenchPlayer(playerId) {
+    return new Promise(function (resolve, reject)
+    {
+
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            connection.query("UPDATE Player SET PlayStatus = 0 WHERE PlayerID = " + playerId, function (err, result, fields) {
+
+                resolve("Player benched");
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
+function UnBenchPlayer(playerId) {
+    return new Promise(function (resolve, reject)
+    {
+
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            connection.query("UPDATE Player SET PlayStatus = 1 WHERE PlayerID = " + playerId, function (err, result, fields) {
+
+                resolve("Player set to active play");
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
+function IsAtRosterLimit(roleId,roster) {
+
+    var roleCount = 0;
+
+    for (var i = 0; i < roster.length; i++) {
+        if (roster[i].PlayStatus == 1 && roster[i].FantasyRole == roleId) {
+            roleCount++;
+        }
+    }
+
+    switch (roleId) {
+        case (1):
+            return (roleCount >= ROSTER_CORE_LIMIT);
+        case (2):
+            return (roleCount >= ROSTER_SUP_LIMIT);
+        case (4):
+            return (roleCount >= ROSTER_MID_LIMIT);
+        default:
+            return true;
+
+    }
+
+}
+
 function shuffle(a) {
     var j, x, i;
     for (i = a.length - 1; i > 0; i--) {
@@ -1218,4 +1531,24 @@ function shuffle(a) {
         a[j] = x;
     }
     return a;
+}
+
+function RoleName(roleId) {
+    var role;
+    switch(roleId) {
+        case (1):
+            role = "Core";
+            break;
+        case (2):
+            role = "Support";
+            break;
+        case (4):
+            role = "Mid";
+            break;
+        default:
+            role = "Unknown";
+            break;
+
+    }
+    return role;
 }
