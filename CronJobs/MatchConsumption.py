@@ -63,6 +63,41 @@ rows = pullResponse.json()["rows"]
 print(str(len(rows)) + " rows received")
 #print(rows)
 
+#validate rows
+errorRows = []
+if (len(rows) > 0):
+    for i, row in enumerate(rows):
+        if (row["match_id"] is None or \
+            row["account_id"] is None or \
+            row["start_time"] is None or \
+            row["kills"] is None or \
+            row["deaths"] is None or \
+            row["last_hits"] is None or \
+            row["denies"] is None or \
+            row["gold_per_min"] is None or \
+            row["towers_killed"] is None or \
+            row["roshans_killed"] is None or \
+            row["teamfight_participation"] is None or \
+            row["obs_placed"] is None or \
+            row["camps_stacked"] is None or \
+            row["rune_pickups"] is None or \
+            row["firstblood_claimed"] is None or \
+            row["stuns"] is None):
+            errorRows.append(row)
+
+#write out error rows to file
+if (len(errorRows) > 0):
+    with open('ERROR_ROWS.log', 'a+') as f:
+        for i, row in enumerate(errorRows):
+            f.write("{0}\n".format(row))
+    f.close()
+
+    for i, row in enumerate(errorRows):
+        rows.remove(row)
+
+print(str(len(rows)) + " rows validated. " + str(len(errorRows)) + " error rows.")
+
+
 if (len(rows) > 0):
     insertQuery = "INSERT INTO Result (MatchID, PlayerID, MatchDate, Kills, \
     Deaths, LastHits, Denies, GPM, Tower, Rosh, Participation, Observers, \
