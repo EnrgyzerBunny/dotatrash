@@ -231,6 +231,8 @@ client.on('ready', () => {
             
         }
 
+
+        //TODO: deprecate this - this is no longer an exposed command
         if (command === 'timer') {
             var length = args[0].value;
             
@@ -748,6 +750,281 @@ client.on('ready', () => {
                     }
                 });
                 return;
+            }
+
+        }
+
+        if (command === 'request') {
+            let subCommand = args[0].name;
+
+            //initial error handling
+
+            if (!IsUser(user.id)){
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: "You are not in the league.",
+                            flags: 64
+                        }
+                    }
+                });
+                return;
+            }
+            //Verify owner has a team
+            let currentSeason = await GetCurrentSeasonId();
+            if (await !HasTeam(user.id,currentSeason)) {
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: "You do not have a team.",
+                            flags: 64
+                        }
+                    }
+                });
+                return;
+            }
+
+            //subcommands
+            if (subCommand === 'list') {
+                let output = await PrintRequestList(user.id);
+                if (output == null) {
+                    output = "Error pulling list";
+                }
+
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: output,
+                            flags: 64
+                        }
+                    }
+                });
+                return;
+            }
+
+            if (subCommand === 'history') {
+                let output = await PrintRequestHistory();
+                if (output == null) {
+                    output = "Error pulling list";
+                }
+
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: output,
+                            flags: 64
+                        }
+                    }
+                });
+                return;
+            }
+
+            if (subCommand === 'cancel') {
+                let reqId = args[0].options[0].value;
+                let playerReqs = await FetchPendingUserRequests(user.id);
+
+                var exists = false;
+                for (var i = 0; i < playerReqs.length; i++) {
+                    if (playerReqs[i].RequestID == reqId) {
+                        exists = true;
+                    }
+                }
+
+                if (!exists) {
+                    client.api.interactions(interaction.id, interaction.token).callback.post({
+                        data: {
+                            type: 4,
+                            data: {
+                                content: "This is not a valid request Id to cancel.",
+                                flags: 64
+                            }
+                        }
+                    });
+                    return;
+                }
+                else {
+                    let output = await CancelRequest(reqId);
+                    client.api.interactions(interaction.id, interaction.token).callback.post({
+                        data: {
+                            type: 4,
+                            data: {
+                                content: output,
+                                flags: 64
+                            }
+                        }
+                    });
+                    return;
+                }
+            }
+
+            if (subCommand === 'submit') {
+                let pickups = new Array();
+                let drops = new Array();
+
+                if (args[0].options == null) {
+                    client.api.interactions(interaction.id, interaction.token).callback.post({
+                        data: {
+                            type: 4,
+                            data: {
+                                content: "Invalid Request: no drops or pickups specified",
+                                flags: 64
+                            }
+                        }
+                    });
+                    return;
+                }
+
+                for (var i = 0; i < args[0].options.length; i++) {
+                    
+                    let tempArray = args[0].options[i].value.replace(" ","").split(",");
+
+                    if (tempArray == null) {
+                        tempArray = new Array();
+                    }
+
+                    for (var x = 0; x < tempArray.length; x++) {
+                        
+                        if (args[0].options[i].name === 'pickups')
+                            pickups.push(Number(tempArray[x]));
+                        else if (args[0].options[i].name === 'drops')
+                            drops.push(Number(tempArray[x]));
+                    }
+                
+                }
+
+                console.log("Pickups: " + pickups.join(","));
+                console.log("Drops: " + drops.join(","));
+
+                //TODO:confirm but this should be a redundant check as its evaluated above
+                //invalid empty request
+                if (pickups.length <= 0 && drops.length <= 0) {
+                    client.api.interactions(interaction.id, interaction.token).callback.post({
+                        data: {
+                            type: 4,
+                            data: {
+                                content: "Invalid Request: no drops or pickups specified",
+                                flags: 64
+                            }
+                        }
+                    });
+                    return;
+
+                }
+
+                let dropOnly = false;
+
+                //check if drop-only request
+                if (pickups.length <= 0 && drops.length > 0) {
+                    dropOnly = true;
+                }
+                else {
+
+                    let pickupCheck = await VerifyPickups(pickups);
+
+                    if (!pickupCheck) {
+                        client.api.interactions(interaction.id, interaction.token).callback.post({
+                            data: {
+                                type: 4,
+                                data: {
+                                    content: "Invalid Request: Pickups contains invalid or unavailable players",
+                                    flags: 64
+                                }
+                            }
+                        });
+                        return;
+                    }
+                }
+
+
+                //drops check
+                let roster = await FetchTeamRoster(user.id);
+                
+
+                //0 - valid
+                //1 - invalid - player is not on bench
+                //2 - invalid - id does not match player on your team
+
+                let validCode = 0;
+
+                if (roster.length <= 0 && drops.length > 0){
+                    validCode = 2;
+                }
+                else {
+                    for (var x = 0; x < drops.length; x++) {
+                        for (var i = 0;i < roster.length; i++) {
+                            if (roster[i].PlayerID == drops[x])
+                            {
+                                if (roster[i].PlayStatus == 1) {
+                                    validCode = 1;
+                                }
+                                break;
+                            }
+                            if (i == roster.length - 1) {
+                                validCode = 2;
+                            }
+                        }
+    
+                        if (validCode != 0) {
+                            break;
+                        }
+                    }
+                }
+
+                
+
+                if (validCode != 0) {
+                    let output = "Invalid Request: " + ((validCode == 1)? "Requested drop is not bench" :
+                    "Requested drop id does not match player on your team");
+                    client.api.interactions(interaction.id, interaction.token).callback.post({
+                        data: {
+                            type: 4,
+                            data: {
+                                content: output,
+                                flags: 64
+                            }
+                        }
+                    });
+                    return;
+                }
+                
+
+                if (dropOnly) {
+                    let output = await DropPlayers(drops);
+                    client.api.interactions(interaction.id, interaction.token).callback.post({
+                        data: {
+                            type: 4,
+                            data: {
+                                content: output,
+                                flags: 64
+                            }
+                        }
+                    });
+
+                    
+                    SubmitDropLog(user.id,drops);
+                    return;
+
+                }
+                else {
+                    let output = await SubmitRequest(user.id,pickups,drops);
+                    client.api.interactions(interaction.id, interaction.token).callback.post({
+                        data: {
+                            type: 4,
+                            data: {
+                                content: output,
+                                flags: 64
+                            }
+                        }
+                    });
+                    return;
+                }
+                
+                
+
             }
 
         }
@@ -1522,6 +1799,297 @@ function IsAtRosterLimit(roleId,roster) {
 
 }
 
+function PrintRequestList(userId) {
+
+    return new Promise(async function (resolve, reject)
+    {
+        var formattedOutput = "```\n";
+
+        let owners = await FetchOwners();
+
+        TrashDBPool.getConnection(function (error, connection) {
+            if (error)
+                throw error;
+
+            connection.query("SELECT RequestLogID, RequestID, OwnerID, SeasonID, DATE_FORMAT(RequestTime,'%Y-%m-%d %H:%i:%s') as RequestTime, RequestType, RequestedPlayers, GivenPlayers, RequestStatus FROM RequestLog WHERE SeasonID = (SELECT SeasonID FROM Season ORDER BY SeasonID DESC LIMIT 1) AND RequestType IN (0,2) AND RequestStatus = 1 AND RequestTime >= (NOW() - INTERVAL 1 DAY) ORDER BY RequestLogID ASC", async function (err, result, fields) {
+
+
+                formattedOutput += "Recently Completed\n";
+                formattedOutput += "Time                |Owner                 |Type    |Pickups                      |Drops                       \n";
+                formattedOutput += "---------------------------------------------------------------------------------------------------------------\n";
+
+                if (result.length <= 0) {
+                    formattedOutput += "None\n";
+                }
+                else {
+
+                    for (var i = 0; i < result.length; i++) {
+                        let reqType = (result[i].RequestType == 0) ? "Pickup" : "Drop";
+
+                        let ownerName = "";
+
+                        for (var x = 0; x < owners.length; x++) {
+                            if (result[i].OwnerID == owners[x].OwnerID) {
+                                ownerName = owners[x].OwnerName;
+                                //console.log(ownerName);
+                                break;
+                            }
+                        }
+                        if (ownerName == "") {
+                            ownerName = "NULL";
+                        }
+                        else {
+                            let owner = await client.guilds.cache.get(SERVER_ID).members.fetch(ownerName);
+                            ownerName = owner.displayName;
+                        }
+
+                        formattedOutput +=
+                            result[i].RequestTime.toString() + " | " +
+                            ownerName.padEnd(20, " ") + " | " +
+                            reqType.padEnd(6, " ") + " | " +
+                            ((result[i].RequestedPlayers != null) ?
+                                result[i].RequestedPlayers.toString().padEnd(27, " ") : "None".padEnd(27, " ")) + " | " +
+                            ((result[i].GivenPlayers != null) ?
+                                result[i].GivenPlayers.toString().padEnd(27, " ") : "None") + "\n";
+                    }
+
+                }
+
+                TrashDBPool.getConnection(function(error, connection) {
+                    if (error) throw error;
+                   
+                    connection.query("SELECT RequestID,RequestedPlayerID,GivenPlayerID FROM Request WHERE OwnerID = (SELECT OwnerID FROM Owner WHERE OwnerName = '" +
+                    userId + "') AND RequestType = 0 AND SeasonID = (SELECT SeasonID FROM Season ORDER BY SeasonID DESC LIMIT 1)", function (err, result, fields) {
+                        
+                        
+                        
+                        formattedOutput += "\nYour Pending Requests\n";
+                        formattedOutput += "ID  |Pickups                      |Drops                       \n";
+                        formattedOutput += "---------------------------------------------------------------\n";
+        
+                        if (result.length <= 0)
+                        {
+                            formattedOutput += "None\n";
+                        }
+                        else {
+                            for (var i = 0; i < result.length; i++) {
+                                formattedOutput +=
+                                    result[i].RequestID.toString().padStart(3," ") + " | " +
+                                    result[i].RequestedPlayerID.toString().padEnd(27," ") + " | " +
+                                    ((result[i].GivenPlayerID != null)?
+                                    result[i].GivenPlayerID.toString().padEnd(27," ") : "None") + "\n";
+                            }
+                        }
+        
+                        formattedOutput += "```";
+        
+                        resolve(formattedOutput);
+        
+                        connection.release();
+                        if (err) throw err;
+                    });
+                });
+
+
+
+                connection.release();
+                if (err)
+                    throw err;
+            });
+        });
+
+        
+    });
+    
+}
+
+function FetchOwners() {
+    return new Promise(function (resolve, reject)
+    {
+
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            
+            connection.query("SELECT Owner.OwnerID, OwnerName, TeamName FROM Owner JOIN Team ON Owner.OwnerID = Team.OwnerID WHERE Team.SeasonID = (SELECT SeasonID FROM Season ORDER BY SeasonID DESC LIMIT 1)", function (err, result, fields) {
+
+                resolve(result);
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
+function PrintRequestHistory() {
+    return new Promise(async function (resolve, reject)
+    {
+        var formattedOutput = "```\n";
+
+        let owners = await FetchOwners();
+
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            
+            connection.query("SELECT RequestLogID, RequestID, OwnerID, SeasonID, DATE_FORMAT(RequestTime,'%Y-%m-%d %H:%i:%s') as RequestTime, RequestType, RequestedPlayers, GivenPlayers, RequestStatus FROM RequestLog WHERE SeasonID = (SELECT SeasonID FROM Season ORDER BY SeasonID DESC LIMIT 1) AND RequestType IN (0,2) ORDER BY RequestLogID ASC", async function (err, result, fields) {
+                
+                formattedOutput += "Time                |Owner                 |Type    |Pickups                      |Drops                        |Status\n";
+                formattedOutput += "-----------------------------------------------------------------------------------------------------------------------\n";
+
+                if (result.length <= 0)
+                {
+                    formattedOutput += "None\n";
+                }
+                else {
+                    for (var i = 0; i < result.length; i++) {
+                        let reqType = (result[i].RequestType == 0)? "Pickup" : "Drop";
+
+                        let ownerName = "";
+
+                        for (var x = 0; x < owners.length; x ++) {
+                            if (result[i].OwnerID == owners[x].OwnerID) {
+                                ownerName = owners[x].OwnerName;
+                                //console.log(ownerName);
+                                break;
+                            }
+                        }
+                        if (ownerName == "") {
+                            ownerName = "NULL";
+                        }
+                        else {
+                            let owner = await client.guilds.cache.get(SERVER_ID).members.fetch(ownerName);
+                            ownerName = owner.displayName;
+                        }
+
+
+                        formattedOutput +=
+                            result[i].RequestTime.toString() + " | " +
+                            ownerName.padEnd(20," ") + " | " +
+                            reqType.padEnd(6," ") + " | " +
+                            ((result[i].RequestedPlayers != null)?
+                            result[i].RequestedPlayers.toString().padEnd(27," ") : "None".padEnd(27," ")) + " | " +
+                            ((result[i].GivenPlayers != null)?
+                            result[i].GivenPlayers.toString().padEnd(27," ") : "None".padEnd(27," ")) + " | " +
+                            RequestStatus(result[i].RequestStatus) + "\n";
+                    }
+                }
+
+                formattedOutput += "```";
+
+                resolve(formattedOutput);
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
+function FetchPendingUserRequests(userId) {
+    return new Promise(function (resolve, reject)
+    {
+
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            
+            connection.query("SELECT RequestID,RequestedPlayerID,GivenPlayerID FROM Request WHERE OwnerID = (SELECT OwnerID FROM Owner WHERE OwnerName = '" +
+            userId + "') AND RequestType = 0 AND SeasonID = (SELECT SeasonID FROM Season ORDER BY SeasonID DESC LIMIT 1)", function (err, result, fields) {
+
+                resolve(result);
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
+function CancelRequest(reqId) {
+    return new Promise(function (resolve, reject)
+    {
+
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            connection.query("DELETE FROM Request WHERE RequestID = " + reqId, function (err, result, fields) {
+
+                resolve("Request Cancelled");
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
+function DropPlayers(drops) {
+    return new Promise(function (resolve, reject)
+    {
+
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            connection.query("UPDATE Player SET FantasyTeamID = 0 WHERE PlayerID IN (" + drops.join(",") + ")", function (err, result, fields) {
+
+                resolve("Players dropped");
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
+function SubmitRequest(userId,pickups,drops) {
+    return new Promise(function (resolve, reject)
+    {
+        let dropFormat = (drops.length > 0)? ("'"+ drops.join("-") + "'") : ("NULL");
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            connection.query("INSERT INTO Request (OwnerID,SeasonID,RequestType,RequestedPlayerID,GivenPlayerID) VALUES((SELECT OwnerID FROM Owner WHERE OwnerName = '" +
+            userId + "'), (SELECT SeasonID FROM Season ORDER BY SeasonID DESC LIMIT 1),0,'" + pickups.join("-") + "'," + dropFormat + ")" , function (err, result, fields) {
+
+                resolve("Request Submitted");
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
+function VerifyPickups(pickups) {
+    return new Promise(function (resolve, reject)
+    {
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            connection.query("SELECT PlayerID FROM Player WHERE FantasyTeamID = 0 AND PlayerID IN (" + pickups.join(",") + ")" , function (err, result, fields) {
+
+                if (result.length == pickups.length) {
+                    resolve(true);
+                }
+                else {
+                    resolve(false);
+                }
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
+function SubmitDropLog(userId,drops) {
+    TrashDBPool.getConnection(function(error, connection) {
+        if (error) throw error;
+        connection.query("INSERT INTO RequestLog (RequestID,OwnerID,SeasonID,RequestTime,RequestType,GivenPlayers,TradeOwner,RequestStatus) VALUES (0,(SELECT OwnerID FROM Owner WHERE OwnerName = '" +
+        userId + "'),(SELECT SeasonID FROM Season ORDER BY SeasonID DESC LIMIT 1), NOW(),2," + drops.join("-") + ",0,1)" , function (err, result, fields) {
+
+            
+            connection.release();
+            if (err) throw err;
+        });
+    });
+}
+
 function shuffle(a) {
     var j, x, i;
     for (i = a.length - 1; i > 0; i--) {
@@ -1551,4 +2119,27 @@ function RoleName(roleId) {
 
     }
     return role;
+}
+
+function RequestStatus(statusId) {
+    var status;
+    switch(statusId) {
+        case (0):
+            status = "Unknown";
+            break;
+        case (1):
+            status = "Success";
+            break;
+        case (2):
+            status = "Request failed - Team full";
+            break;
+        case (3):
+            status = "Request failed - Player unavailable";
+            break;
+        default:
+            status = "Error - Status unavailable";
+            break;
+    }
+    return status;
+
 }
