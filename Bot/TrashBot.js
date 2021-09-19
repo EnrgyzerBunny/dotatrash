@@ -8,6 +8,7 @@ const guild_id = require("./guild.json");
 
 //server refs
 const SERVER_ID = '220670947479257088';
+const OUTPUT_CHANNEL = '355773031643348993';
 
 //LEAGUE MASTER SETTINGS ------------
 const ROSTER_CORE_LIMIT = 2;
@@ -76,6 +77,8 @@ client.on('ready', () => {
 
     //Slash Command handling
     client.ws.on('INTERACTION_CREATE', async interaction => {
+        try{
+
         const command = interaction.data.name.toLowerCase();
         const args = interaction.data.options;
 
@@ -1028,6 +1031,372 @@ client.on('ready', () => {
             }
 
         }
+
+        if (command === 'trade') {
+            let subCommand = args[0].name;
+
+            //initial error handling
+
+            if (!IsUser(user.id)){
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: "You are not in the league.",
+                            flags: 64
+                        }
+                    }
+                });
+                return;
+            }
+            //Verify owner has a team
+            let currentSeason = await GetCurrentSeasonId();
+            if (await !HasTeam(user.id,currentSeason)) {
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: "You do not have a team.",
+                            flags: 64
+                        }
+                    }
+                });
+                return;
+            }
+
+            //subcommands
+            if (subCommand === 'list') {
+                let output = await PrintTradeList(user.id);
+                if (output == null) {
+                    output = "Error pulling list";
+                }
+
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: output,
+                            flags: 64
+                        }
+                    }
+                });
+                return;
+            }
+
+            if (subCommand === 'cancel') {
+                let tradeId = args[0].options[0].value;
+                let pending = await FetchTradeList();
+                if (pending == null || pending.length <= 0) {
+                    client.api.interactions(interaction.id, interaction.token).callback.post({
+                        data: {
+                            type: 4,
+                            data: {
+                                content: "Invalid Trade ID",
+                                flags: 64
+                            }
+                        }
+                    });
+                    return;
+                }
+
+                for (var i = 0; i < pending.length;i++) {
+                    if (pending[i].OwnerName == user.id && pending[i].RequestID == tradeId) {
+                        let output = await CancelRequest(tradeId);
+                        client.api.interactions(interaction.id, interaction.token).callback.post({
+                            data: {
+                                type: 4,
+                                data: {
+                                    content: output,
+                                    flags: 64
+                                }
+                            }
+                        });
+                        let recipient = await FetchTradeRecipient(pending[i].RequestedPlayerID.toString().split('-'));
+                        let notification = "A user has canceled a trade pending with you.";
+                        SendPM(recipient,notification);
+                        return;
+                    }
+                }
+
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: "Invalid Trade ID",
+                            flags: 64
+                        }
+                    }
+                });
+
+                return;
+            }
+
+            if (subCommand === 'respond') {
+                let pending = await FetchTradeList();
+                if (pending == null || pending.length <= 0) {
+                    client.api.interactions(interaction.id, interaction.token).callback.post({
+                        data: {
+                            type: 4,
+                            data: {
+                                content: "You have no pending trades to respond to.",
+                                flags: 64
+                            }
+                        }
+                    });
+                    return;
+                }
+
+                let tradeID = null;
+                let response = null;
+
+                for (var i = 0; i < args[0].options.length; i++) {
+                    if (args[0].options[i].name == "tradeid") {
+                        tradeID = args[0].options[i].value;
+                    }
+                    else if (args[0].options[i].name == "action") {
+                        response = args[0].options[i].value;
+                    }
+                }
+
+                for (var i = 0; i < pending.length;i++) {
+                    if (pending[i].RequestID == tradeID) {
+                        let recipient = await FetchTradeRecipient(pending[i].RequestedPlayerID.toString().split('-'));
+                        if (recipient != user.id) {
+                            client.api.interactions(interaction.id, interaction.token).callback.post({
+                                data: {
+                                    type: 4,
+                                    data: {
+                                        content: "Invalid: This trade is not pending with you",
+                                        flags: 64
+                                    }
+                                }
+                            });
+                            return;
+                        }
+
+                        if (response == "Accept") {
+
+                            let output = await AcceptTrade(pending[i],user.id);
+                            client.api.interactions(interaction.id, interaction.token).callback.post({
+                                data: {
+                                    type: 4,
+                                    data: {
+                                        content: output,
+                                        flags: 64
+                                    }
+                                }
+                            });
+                            let sender = await FetchTradeRecipient(pending[i].RequestedPlayerID.toString().split('-'));
+                            //owner of req player as trade has already been enacted at this point
+                            let notification = "Your trade has been accepted.";
+                            SendPM(sender,notification);
+                            return;
+
+                        }
+                        else
+                        {
+                            let output = await DenyTrade(tradeID);
+                            client.api.interactions(interaction.id, interaction.token).callback.post({
+                                data: {
+                                    type: 4,
+                                    data: {
+                                        content: output,
+                                        flags: 64
+                                    }
+                                }
+                            });
+                            let sender = await FetchTradeRecipient(pending[i].GivenPlayerID.toString().split('-'));
+                            let notification = "Your trade has been denied.";
+                            SendPM(sender,notification);
+                            return;
+                        }
+                        
+                        
+                        
+                    }
+                }
+
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: "Invalid Trade ID",
+                            flags: 64
+                        }
+                    }
+                });
+                return;
+            }
+
+            if (subCommand === 'new') {
+                
+                //consume pickups and drops and validate they are provided
+                let pickups = new Array();
+                let given = new Array();
+
+                if (args[0].options == null) {
+                    client.api.interactions(interaction.id, interaction.token).callback.post({
+                        data: {
+                            type: 4,
+                            data: {
+                                content: "Invalid Request: no given or requested players specified",
+                                flags: 64
+                            }
+                        }
+                    });
+                    return;
+                }
+
+                for (var i = 0; i < args[0].options.length; i++) {
+                    
+                    let tempArray = args[0].options[i].value.replace(" ","").split(",");
+
+                    if (tempArray == null) {
+                        tempArray = new Array();
+                    }
+
+                    for (var x = 0; x < tempArray.length; x++) {
+                        
+                        if (args[0].options[i].name === 'pickups')
+                            pickups.push(Number(tempArray[x]));
+                        else if (args[0].options[i].name === 'given')
+                            given.push(Number(tempArray[x]));
+                    }
+                
+                }
+
+                if (pickups.length != given.length) {
+                    client.api.interactions(interaction.id, interaction.token).callback.post({
+                        data: {
+                            type: 4,
+                            data: {
+                                content: "Invalid Request: pickups and drops must be same amount.",
+                                flags: 64
+                            }
+                        }
+                    });
+                    return;
+                }
+
+                
+                //drops check
+                let roster = await FetchTeamRoster(user.id);
+                
+
+                //0 - valid
+                //1 - invalid - player is not on bench
+                //2 - invalid - id does not match player on your team
+
+                let validCode = 0;
+
+                if (roster.length <= 0 && given.length > 0){
+                    validCode = 2;
+                }
+                else {
+                    for (var x = 0; x < given.length; x++) {
+                        for (var i = 0;i < roster.length; i++) {
+                            if (roster[i].PlayerID == given[x])
+                            {
+                                if (roster[i].PlayStatus == 1) {
+                                    validCode = 1;
+                                }
+                                break;
+                            }
+                            if (i == roster.length - 1) {
+                                validCode = 2;
+                            }
+                        }
+    
+                        if (validCode != 0) {
+                            break;
+                        }
+                    }
+                }
+
+                
+
+                if (validCode != 0) {
+                    let output = "Invalid Request: " + ((validCode == 1)? "Given player is not bench" :
+                    "Given player id does not match player on your team");
+                    client.api.interactions(interaction.id, interaction.token).callback.post({
+                        data: {
+                            type: 4,
+                            data: {
+                                content: output,
+                                flags: 64
+                            }
+                        }
+                    });
+                    return;
+                }
+
+                //check that no pickups are part of teams own roster
+                for (var i = 0;i < pickups.length; i++) {
+                    for (var x = 0; x < roster.length; x++) {
+                        if (roster[x].PlayerID == pickups[i]) {
+                            client.api.interactions(interaction.id, interaction.token).callback.post({
+                                data: {
+                                    type: 4,
+                                    data: {
+                                        content: "Invalid Request: Cannot request a pickup of a player already on your roster",
+                                        flags: 64
+                                    }
+                                }
+                            });
+                            return;
+                        }
+                    }
+                }
+
+                let pickupCheck = await VerifyTradePickups(pickups);
+
+                    if (!pickupCheck) {
+                        client.api.interactions(interaction.id, interaction.token).callback.post({
+                            data: {
+                                type: 4,
+                                data: {
+                                    content: "Invalid Request: Pickups contains unavailable players or players from multiple teams",
+                                    flags: 64
+                                }
+                            }
+                        });
+                        return;
+                    }
+                
+                let output = await SubmitTradeRequest(user.id,pickups,given);
+                    client.api.interactions(interaction.id, interaction.token).callback.post({
+                        data: {
+                            type: 4,
+                            data: {
+                                content: output,
+                                flags: 64
+                            }
+                        }
+                    });
+
+                let recipient = await FetchTradeRecipient(pickups);
+                let notification = "A user has sent you a trade request, use </trade list> command to respond.";
+                SendPM(recipient,notification);
+                return;
+            }
+
+
+        }
+
+
+    } catch (err) {
+        DiscordLog("Command error: " + err);
+        Client.api.interactions(interaction.id, interaction.token).callback.post({
+            data: {
+                type: 4,
+                data: {
+                    content: "Command Error.",
+                    flags: 64
+                }
+            }
+        });
+        return;
+    }
     });
 });
 
@@ -1284,6 +1653,8 @@ async function NextDraftTurn(guild_id,channel_id) {
     {
         DRAFT_TURN_INDEX = 0;
         DRAFT_ROUNDS_COUNT++;
+        //zigzag order
+        DRAFT_ORDER = DRAFT_ORDER.reverse();
     }
 
     if (DRAFT_ROUNDS_COUNT >= DRAFT_ROUNDS_LIMIT) {
@@ -1622,7 +1993,8 @@ function PrintTeamRoster(userId) {
                 
                 if (result.length <= 0)
                 {
-                    return null;
+                    resolve("```None\n```");
+                    return;
                 }
 
                 var div = "--------------------------------------------------\n";
@@ -2021,6 +2393,47 @@ function CancelRequest(reqId) {
     });
 }
 
+function DenyTrade(reqId) {
+    return new Promise(function (resolve, reject)
+    {
+
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            connection.query("DELETE FROM Request WHERE RequestID = " + reqId, function (err, result, fields) {
+
+                resolve("Trade Denied");
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
+function AcceptTrade(trade,userId) {
+    return new Promise(function (resolve, reject)
+    {
+
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            connection.query("UPDATE Player SET FantasyTeamID = (SELECT TeamID FROM Team JOIN Owner ON Team.OwnerID = Owner.OwnerID WHERE Owner.OwnerID = " + trade.OwnerID +
+                ") WHERE PlayerID IN (" + trade.RequestedPlayerID.toString().replace('-',',') + "); \
+                UPDATE Player SET FantasyTeamID = (SELECT TeamID FROM Team JOIN Owner ON Team.OwnerID = Owner.OwnerID WHERE Owner.OwnerName = '" + userId +
+                "') WHERE PlayerID IN (" + trade.GivenPlayerID.toString().replace('-',',') + "); \
+                INSERT INTO RequestLog (RequestID,OwnerID,SeasonID,RequestTime,RequestType,RequestedPlayers,GivenPlayers,TradeOwner,RequestStatus) VALUES (" + trade.RequestID + "," +
+                trade.OwnerID + ",(SELECT SeasonID FROM Season ORDER BY SeasonID DESC LIMIT 1), NOW(),1," + trade.RequestedPlayerID + "," + trade.GivenPlayerID +
+                ",(SELECT OwnerID FROM Owner WHERE OwnerName = '" + userId + "'),1); \
+                DELETE FROM Request WHERE RequestID = " + trade.RequestID, function (err, result, fields) {
+
+                resolve("Trade Accepted and Enacted");
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
 function DropPlayers(drops) {
     return new Promise(function (resolve, reject)
     {
@@ -2090,6 +2503,200 @@ function SubmitDropLog(userId,drops) {
     });
 }
 
+function FetchRosters() {
+    return new Promise(function (resolve, reject)
+    {
+
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            
+            connection.query("SELECT Owner.OwnerName, Owner.OwnerID, Team.TeamName, Player.PlayerID, Player.PlayerName, Player.FantasyRole, Player.PlayStatus, ProTeam.ProTeamName FROM \
+                Player \
+                JOIN Team ON Player.FantasyTeamID = Team.TeamID \
+                JOIN Owner ON Team.OwnerID = Owner.OwnerID \
+                JOIN ProTeam ON Player.ProTeamID = ProTeam.ProTeamID \
+                WHERE Team.SeasonID = (SELECT SeasonID FROM Season ORDER BY SeasonID DESC LIMIT 1)", function (err, result, fields) {
+
+                resolve(result);
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
+
+
+function PrintTradeList(userId) {
+    
+    return new Promise(async function (resolve, reject)
+    {
+        var formattedOutput = "```\n";
+
+        let rosters = await FetchRosters();
+
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            
+            connection.query("SELECT Request.RequestID, Request.OwnerID, DATE_FORMAT(Request.RequestTime,'%Y-%m-%d %H:%i:%s') as RequestTime, Request.RequestedPlayerID, Request.GivenPlayerID, Owner.OwnerName FROM Request \
+                JOIN Owner ON Request.OwnerID = Owner.OwnerID \
+                WHERE RequestType = 1 \
+                AND SeasonID = (SELECT SeasonID FROM Season ORDER BY SeasonID DESC LIMIT 1)", async function (err, result, fields) {
+                
+                
+                if (result.length <= 0)
+                {
+                    formattedOutput += "None\n";
+                }
+                else {
+                    for (var i = 0; i < result.length; i++) {
+
+                        let tradeStatus = "RECEIVED";
+                        if (result[i].OwnerName == userId) {
+                            tradeStatus = "SENT";
+                        }
+                        else {
+                            let recipient = await FetchTradeRecipient(result[i].RequestedPlayerID.toString().split('-'));
+                            if (recipient != userId) {
+                                continue;
+                            }
+                        }
+
+                        let reqs = result[i].RequestedPlayerID.toString().split('-');
+                        let given = result[i].GivenPlayerID.toString().split('-');
+
+                        let reqsNames = new Array();
+                        let givenNames = new Array();
+
+                        for (var x = 0;x < rosters.length;x++) {
+                            for (var j = 0; j < reqs.length; j++) {
+                                if (reqs[j] == rosters[x].PlayerID) {
+                                    reqsNames.push(rosters[x].PlayerName);
+                                }
+                                if (given[j] == rosters[x].PlayerID) {
+                                    givenNames.push(rosters[x].PlayerName);
+                                }
+                            }
+                        }
+
+                        formattedOutput +=
+                            
+                            result[i].RequestID.toString().padStart(3," ") + " | " +
+                            tradeStatus.padEnd(8," ") + " | " +
+                            result[i].RequestTime.toString() + " | " +
+                            reqsNames.join(", ") + " for " +
+                            givenNames.join(", ") +
+                            "\n";
+                    }
+                }
+
+                formattedOutput += "```";
+
+                resolve(formattedOutput);
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
+function FetchTradeList() {
+    
+    return new Promise(async function (resolve, reject)
+    {
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            
+            connection.query("SELECT Request.RequestID, Request.OwnerID, DATE_FORMAT(Request.RequestTime,'%Y-%m-%d %H:%i:%s') as RequestTime, Request.RequestedPlayerID, Request.GivenPlayerID, Owner.OwnerName FROM Request \
+                JOIN Owner ON Request.OwnerID = Owner.OwnerID \
+                WHERE RequestType = 1 \
+                AND SeasonID = (SELECT SeasonID FROM Season ORDER BY SeasonID DESC LIMIT 1)", async function (err, result, fields) {
+                
+                
+                
+                resolve(result);
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
+function VerifyTradePickups(pickups) {
+    return new Promise(function (resolve, reject)
+    {
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            connection.query("SELECT FantasyTeamID, PlayStatus FROM Player WHERE PlayerID IN (" +
+            + pickups.join(",") + ")" , function (err, result, fields) {
+
+                if (result.length <= 0 || result.length != pickups.length)
+                {
+                    resolve(false);
+                }
+                else {
+                    let team = result[0].FantasyTeamID;
+                    let invalid = false;
+                    for (var i = 0; i < result.length; i++) {
+                        if (result[i].FantasyTeamID != team || result[i].PlayStatus != 0) {
+                            resolve(false);
+                            invalid = true;
+                            break;
+                        }
+                    }
+                    if (!invalid) {
+                        resolve(true);
+                    }
+
+                }
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
+function FetchTradeRecipient(pickups){
+    return new Promise(function (resolve, reject)
+    {
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            connection.query("SELECT OwnerName FROM Owner \
+            JOIN Team ON Owner.OwnerID = Team.OwnerID \
+            JOIN Player ON Team.TeamID = Player.FantasyTeamID \
+            WHERE PlayerID IN (" +
+            + pickups.join(",") + ") LIMIT 1" , function (err, result, fields) {
+
+                resolve(result[0].OwnerName);
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
+function SubmitTradeRequest(userId,pickups,given) {
+    return new Promise(function (resolve, reject)
+    {
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            connection.query("INSERT INTO Request (OwnerID,SeasonID,RequestType,RequestedPlayerID,GivenPlayerID) VALUES((SELECT OwnerID FROM Owner WHERE OwnerName = '" +
+            userId + "'), (SELECT SeasonID FROM Season ORDER BY SeasonID DESC LIMIT 1),1,'" + pickups.join("-") + "','" + given.join("-") + "')" , function (err, result, fields) {
+
+                resolve("Request Submitted");
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
 function shuffle(a) {
     var j, x, i;
     for (i = a.length - 1; i > 0; i--) {
@@ -2141,5 +2748,19 @@ function RequestStatus(statusId) {
             break;
     }
     return status;
+}
 
+async function SendPM(recipient,notification) {
+    client.users.fetch(recipient).then((userRef) => {
+        userRef.send(notification);
+    });
+}
+
+async function DiscordLog(msg) {
+    console.log(msg);
+    client.guilds.fetch(SERVER_ID).then((guildRef) => {
+        guildRef.channels.fetch(OUTPUT_CHANNEL).then((channelRef) => {
+            channelRef.send(msg);
+        });
+    });
 }
