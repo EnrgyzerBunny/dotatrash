@@ -136,6 +136,7 @@ while(len(reqs) > 0):
 
 
 TRASH_CURSOR.execute("UPDATE Static SET Value = '" + "-".join(newWaiver) + "' WHERE Name = 'WaiverPriority'")
+TRASH_DB.commit()
 
 TRASH_DB.close()
                     
