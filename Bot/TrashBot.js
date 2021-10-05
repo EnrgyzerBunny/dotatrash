@@ -26,10 +26,10 @@ var DRAFT_MODE = DRAFT_MODE_OFF;
 
 var DRAFT_ORDER = null;
 var DRAFT_TURN_INDEX = -1;
-var DRAFT_ROUNDS_LIMIT = 2; //How many draft rounds
+var DRAFT_ROUNDS_LIMIT = 8; //How many draft rounds
 var DRAFT_ROUNDS_COUNT = 0;
 var DRAFT_CURRENT_PICK = null;
-var DRAFT_INIT_TIMER = 1; //in min
+var DRAFT_INIT_TIMER = 3; //in min
 var DRAFT_ROUND_TIMER = 2; //in min
 var DRAFT_PLAYERS = null;
 var DRAFT_USER_TEAMS = null;
