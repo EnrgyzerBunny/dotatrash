@@ -5,6 +5,7 @@ const mysql = require('mysql');
 const client = new Discord.Client();
 const token = require("./token.json")
 const guild_id = require("./guild.json");
+const { Console } = require('console');
 
 //server refs
 const SERVER_ID = '220670947479257088';
@@ -1383,6 +1384,61 @@ client.on('ready', () => {
 
         }
 
+        if (command === 'scores') {
+
+            var all = false;
+
+            if (args != null && args[0] != null)
+            {
+                all = args[0].value;
+            }
+
+            //initial league error handling if a user is not displaying all scores (if all scores it doesnt matter)
+            if (!all) {
+                if (!IsUser(user.id)){
+                    client.api.interactions(interaction.id, interaction.token).callback.post({
+                        data: {
+                            type: 4,
+                            data: {
+                                content: "You are not in the league.",
+                                flags: 64
+                            }
+                        }
+                    });
+                    return;
+                }
+                //Verify owner has a team
+                let currentSeason = await GetCurrentSeasonId();
+                if (await !HasTeam(user.id,currentSeason)) {
+                    client.api.interactions(interaction.id, interaction.token).callback.post({
+                        data: {
+                            type: 4,
+                            data: {
+                                content: "You do not have a team.",
+                                flags: 64
+                            }
+                        }
+                    });
+                    return;
+                }
+            }
+
+            let output = await PrintScores(user.id,all);
+                if (output == null) {
+                    output = "Error pulling list";
+                }
+
+                client.api.interactions(interaction.id, interaction.token).callback.post({
+                    data: {
+                        type: 4,
+                        data: {
+                            content: output
+                        }
+                    }
+                });
+                return;
+        }
+
 
     } catch (err) {
         DiscordLog("Command error: " + err);
@@ -1989,7 +2045,7 @@ function PrintTeamRoster(userId) {
 
         TrashDBPool.getConnection(function(error, connection) {
             if (error) throw error;
-            connection.query("SELECT Team.TeamName, ProTeam.ProTeamName, Player.PlayerID, Player.PlayerName, Player.AccountID, Player.FantasyRole, Player.PlayStatus FROM Player JOIN Team ON Player.FantasyTeamID = Team.TeamID JOIN Owner ON Team.OwnerID = Owner.OwnerID JOIN ProTeam ON Player.ProTeamID = ProTeam.ProTeamID WHERE Owner.OwnerName = " + userId, function (err, result, fields) {
+            connection.query("SELECT Team.TeamName, ProTeam.ProTeamName, ProTeam.ProTeamTag, Player.PlayerID, Player.PlayerName, Player.AccountID, Player.FantasyRole, Player.PlayStatus FROM Player JOIN Team ON Player.FantasyTeamID = Team.TeamID JOIN Owner ON Team.OwnerID = Owner.OwnerID JOIN ProTeam ON Player.ProTeamID = ProTeam.ProTeamID WHERE Owner.OwnerName = " + userId, function (err, result, fields) {
                 
                 if (result.length <= 0)
                 {
@@ -1997,7 +2053,7 @@ function PrintTeamRoster(userId) {
                     return;
                 }
 
-                var div = "--------------------------------------------------\n";
+                var div = "-----------------------------------\n";
                 var empty = true;
                 formattedOutput += result[0].TeamName + "\n" +
                 "Core\n" + div;
@@ -2006,10 +2062,10 @@ function PrintTeamRoster(userId) {
                 for (var i = 0; i < result.length; i++) {
                    if (result[i].PlayStatus != 1 || result[i].FantasyRole != 1) {
                        continue;
-                   }
+                   }//8 for tag
                     formattedOutput+= result[i].PlayerID.toString().padStart(3," ") + " | ";
-                    formattedOutput+= result[i].PlayerName.toString().padEnd(15," ") + " | ";
-                    formattedOutput+= result[i].ProTeamName.toString().padEnd(16," ") + " | ";
+                    formattedOutput+= TabFormat(result[i].PlayerName.toString(),10) + " | ";
+                    formattedOutput+= TabFormat(result[i].ProTeamTag.toString(),8) + " | ";
                     formattedOutput+= RoleName(result[i].FantasyRole).padEnd(7," ") + "\n";
                     empty = false;
                 }
@@ -2029,10 +2085,10 @@ function PrintTeamRoster(userId) {
                     if (result[i].PlayStatus != 1 || result[i].FantasyRole != 4) {
                         continue;
                     }
-                     formattedOutput+= result[i].PlayerID.toString().padStart(3," ") + " | ";
-                     formattedOutput+= result[i].PlayerName.toString().padEnd(15," ") + " | ";
-                     formattedOutput+= result[i].ProTeamName.toString().padEnd(16," ") + " | ";
-                     formattedOutput+= RoleName(result[i].FantasyRole).padEnd(7," ") + "\n";
+                        formattedOutput+= result[i].PlayerID.toString().padStart(3," ") + " | ";
+                        formattedOutput+= TabFormat(result[i].PlayerName.toString(),10) + " | ";
+                        formattedOutput+= TabFormat(result[i].ProTeamTag.toString(),8) + " | ";
+                        formattedOutput+= RoleName(result[i].FantasyRole).padEnd(7," ") + "\n";
                      empty = false;
                  }
 
@@ -2051,10 +2107,10 @@ function PrintTeamRoster(userId) {
                     if (result[i].PlayStatus != 1 || result[i].FantasyRole != 2) {
                         continue;
                     }
-                     formattedOutput+= result[i].PlayerID.toString().padStart(3," ") + " | ";
-                     formattedOutput+= result[i].PlayerName.toString().padEnd(15," ") + " | ";
-                     formattedOutput+= result[i].ProTeamName.toString().padEnd(16," ") + " | ";
-                     formattedOutput+= RoleName(result[i].FantasyRole).padEnd(7," ") + "\n";
+                        formattedOutput+= result[i].PlayerID.toString().padStart(3," ") + " | ";
+                        formattedOutput+= TabFormat(result[i].PlayerName.toString(),10) + " | ";
+                        formattedOutput+= TabFormat(result[i].ProTeamTag.toString(),8) + " | ";
+                        formattedOutput+= RoleName(result[i].FantasyRole).padEnd(7," ") + "\n";
                      empty = false;
                  }
 
@@ -2073,10 +2129,10 @@ function PrintTeamRoster(userId) {
                     if (result[i].PlayStatus != 0) {
                         continue;
                     }
-                     formattedOutput+= result[i].PlayerID.toString().padStart(3," ") + " | ";
-                     formattedOutput+= result[i].PlayerName.toString().padEnd(15," ") + " | ";
-                     formattedOutput+= result[i].ProTeamName.toString().padEnd(16," ") + " | ";
-                     formattedOutput+= RoleName(result[i].FantasyRole).padEnd(7," ") + "\n";
+                        formattedOutput+= result[i].PlayerID.toString().padStart(3," ") + " | ";
+                        formattedOutput+= TabFormat(result[i].PlayerName.toString(),10) + " | ";
+                        formattedOutput+= TabFormat(result[i].ProTeamTag.toString(),8) + " | ";
+                        formattedOutput+= RoleName(result[i].FantasyRole).padEnd(7," ") + "\n";
                      empty = false;
                  }
 
@@ -2526,6 +2582,133 @@ function FetchRosters() {
     });
 }
 
+function FetchMatchups() {
+    return new Promise(function (resolve, reject)
+    {
+
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            
+            connection.query("SELECT Matchup.MatchupID, Matchup.TeamA_ID, Matchup.TeamB_ID,A.OwnerID as 'TeamA_Owner',A2.OwnerName as 'TeamA_OwnerName', B.OwnerID as 'TeamB_Owner',B2.OwnerName as 'TeamB_OwnerName', A.TeamName as 'TeamA_Name', B.TeamName as 'TeamB_Name', \
+                Matchup.Date FROM Matchup LEFT JOIN Team as A ON Matchup.TeamA_ID = A.TeamID LEFT JOIN Team as B ON Matchup.TeamB_ID = B.TeamID LEFT JOIN Owner as A2 ON A.OwnerID = A2.OwnerID LEFT JOIN Owner B2 ON B.OwnerID = B2.OwnerID \
+                WHERE Matchup.SeasonID = (SELECT SeasonID FROM Season ORDER BY SeasonID DESC LIMIT 1) ORDER BY Matchup.Date ASC", function (err, result, fields) {
+
+                resolve(result);
+
+                connection.release();
+                if (err) throw err;
+            });
+        });
+    });
+}
+
+function PrintScores(userId,all) {
+
+    //TODO:
+    //grab matchups (joined with ownername)
+    //filter to current days matchups
+    //if !all then filter to just matchup containing user
+    //pull score query for team with date from matchup date to next matchup date (or matchup date + 1day if no next matchup)
+
+    return new Promise(async function (resolve, reject)
+    {
+        var formattedOutput = "```";
+
+        //let rosters = await FetchRosters();
+        let matchups = await FetchMatchups();
+        if (matchups == null || matchups.length <= 0) {
+            resolve(null);
+            return;
+        }
+
+        var lastMatchup = null;
+        var nextMatchup = null;
+
+        for (var i = 0; i < matchups.length; i++) {
+            if (matchups[i].Date != lastMatchup && Date.parse(matchups[i].Date) < Date.now()) {
+                lastMatchup = matchups[i].Date;
+            }
+            else if (Date.parse(matchups[i].Date) > Date.now()) {
+                nextMatchup = matchups[i].Date;
+                break;
+            }
+        }
+
+        var futureMatchup = false;
+        if (lastMatchup == null) {
+            futureMatchup = true;
+            formattedOutput += "\nNo current matchup - displaying next upcomming.\n";
+        }
+        var targetDate = (!futureMatchup)? lastMatchup : nextMatchup;
+        console.log("matchupdate: " + new Date(Date.parse(targetDate)).toISOString());
+        formattedOutput += "\n" + targetDate + ":\n";
+
+        var currentMatchups = new Array();
+
+        for (var i = 0; i < matchups.length; i++) {
+            
+            if (matchups[i].Date.toString() == targetDate.toString()) {
+                if (!all && matchups[i].TeamA_OwnerName != userId && matchups[i].TeamB_OwnerName != userId) {
+                    continue;
+                }
+                currentMatchups.push(matchups[i]);
+            }
+        }
+
+        TrashDBPool.getConnection(function(error, connection) {
+            if (error) throw error;
+            
+            
+            connection.query("SELECT Team.TeamName, Team.OwnerID, Team.TeamID, Player.PlayerName, ProTeam.ProTeamTag, \
+            SUM(ROUND((0.3 * Result.Kills + (3 - 0.3 * Result.Deaths) + 0.003 * (Result.LastHits + Result.Denies) + \
+            0.002 * Result.GPM + Result.Tower + Result.Rosh + 3 * Result.Participation + 0.5 * Result.Observers + 0.5 * \
+            Result.Stacks + 0.25 * Result.Runes + 4 * Result.FirstBloods + 0.05 * Result.Stun), 1)) as 'Points', \
+            COUNT(Result.ResultID) as 'Result Rows' FROM Team JOIN \
+            Player ON Team.TeamID = Player.FantasyTeamID JOIN \
+            ProTeam ON Player.ProTeamID = ProTeam.ProTeamID JOIN \
+            Result ON Player.AccountID = Result.PlayerID \
+            WHERE Result.MatchDate > '" + new Date(Date.parse(targetDate)).toISOString() + "' AND \
+            Player.PlayStatus = 1 AND \
+            Team.SeasonID = 3 \
+            GROUP BY Player.PlayerID", function (err, result, fields) {
+                
+                
+                for (var i = 0; i < currentMatchups.length;i++) {
+                    var bye = (currentMatchups[i].TeamB_ID == 0);
+                    var teamAPt = 0;
+                    var teamBPt = 0;
+                    console.log(result.length);
+                    for (var j = 0; j < result.length; j++) {
+                        console.log(result[j].TeamID.toString() + "|" + currentMatchups[i].TeamA_ID.toString() + "|" + currentMatchups[i].TeamB_ID.toString() + "|" + Number(result[j].Points).toString());
+                        if (result[j].TeamID.toString() == currentMatchups[i].TeamA_ID.toString()) {
+                            teamAPt += Number(result[j].Points);
+                        }
+                        if (result[j].TeamID.toString() == currentMatchups[i].TeamB_ID.toString()) {
+                            teamBPt += Number(result[j].Points);
+                        }
+                    }
+
+                    formattedOutput += "\n" + currentMatchups[i].TeamA_Name + ": " + teamAPt.toFixed(2) + " vs " + ((!bye) ? currentMatchups[i].TeamB_Name : "BYE") + ": " + teamBPt.toFixed(2) + "\n";
+                   
+                }
+
+                formattedOutput += "```";
+
+                
+                resolve(formattedOutput);
+                connection.release();
+                if (err) throw err;
+            });
+        });
+
+
+        
+
+        
+    });
+
+}
+
 
 
 function PrintTradeList(userId) {
@@ -2763,4 +2946,8 @@ async function DiscordLog(msg) {
             channelRef.send(msg);
         });
     });
+}
+
+function TabFormat(text,length) {
+    return text.substring(0,length).padEnd(length," ");
 }
