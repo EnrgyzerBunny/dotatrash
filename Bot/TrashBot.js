@@ -15,6 +15,11 @@ const OUTPUT_CHANNEL = '355773031643348993';
 const ROSTER_CORE_LIMIT = 2;
 const ROSTER_MID_LIMIT = 1;
 const ROSTER_SUP_LIMIT = 2;
+const ROSTER_LOCK_START_H = 23;
+const ROSTER_LOCK_START_M = 30;
+const ROSTER_LOCK_END_H = 12;
+const ROSTER_LOCK_END_M = 0;
+
 
 //hacky enums
 const DRAFT_MODE_OFF = 0;
@@ -624,6 +629,23 @@ client.on('ready', () => {
             }
 
             if (subCommand === 'bench') {
+
+                var hours = new Date().getHours();
+                var min = new Date().getMinutes();
+                if ((hours > ROSTER_LOCK_START_H || (hours == ROSTER_LOCK_START_H && minutes >= ROSTER_LOCK_START_M)) ||
+                    ((hours < ROSTER_LOCK_END_H) || hours == ROSTER_LOCK_END_H && minutes <= ROSTER_LOCK_END_M)) {
+                        client.api.interactions(interaction.id, interaction.token).callback.post({
+                            data: {
+                                type: 4,
+                                data: {
+                                    content: "Request Failed - Rosters are Locked.",
+                                    flags: 64
+                                }
+                            }
+                        });
+                        return;
+                }
+
                 let playerId = args[0].options[0].value;
                 
                 let roster = await FetchTeamRoster(user.id);
@@ -682,6 +704,22 @@ client.on('ready', () => {
             }
 
             if (subCommand === 'play') {
+                var hours = new Date().getHours();
+                var min = new Date().getMinutes();
+                if ((hours > ROSTER_LOCK_START_H || (hours == ROSTER_LOCK_START_H && minutes >= ROSTER_LOCK_START_M)) ||
+                    ((hours < ROSTER_LOCK_END_H) || hours == ROSTER_LOCK_END_H && minutes <= ROSTER_LOCK_END_M)) {
+                        client.api.interactions(interaction.id, interaction.token).callback.post({
+                            data: {
+                                type: 4,
+                                data: {
+                                    content: "Request Failed - Rosters are Locked.",
+                                    flags: 64
+                                }
+                            }
+                        });
+                        return;
+                }
+
                 let playerId = args[0].options[0].value;
                 
                 let roster = await FetchTeamRoster(user.id);
