@@ -47,7 +47,7 @@ print(datetime.datetime.now())
 TRASH_CURSOR = TRASH_DB.cursor()
 
 #Get latest parsed match ID
-TRASH_CURSOR.execute("SELECT DISTINCT MatchID FROM Result ORDER BY MatchID DESC LIMIT 25")
+TRASH_CURSOR.execute("SELECT DISTINCT MatchID FROM Result ORDER BY MatchID DESC LIMIT 10")
 queryResult = TRASH_CURSOR.fetchall()
 print("latest:" + str(queryResult[0][0]))
 print("checking from:" + str(queryResult[len(queryResult)-1][0]))
@@ -115,38 +115,40 @@ if (len(rows) > 0):
     for i, row in enumerate(dupRows):
         rows.remove(row)
 
+    if (len(rows) > 0):
 
-    insertQuery = "INSERT INTO Result (MatchID, PlayerID, MatchDate, Kills, \
-    Deaths, LastHits, Denies, GPM, Tower, Rosh, Participation, Observers, \
-    Stacks, Runes, FirstBloods, Stun) VALUES "
 
-    #insert into result table
-    for i, row in enumerate(rows):
-        insertQuery += "(" + \
-        str(row["match_id"]) + "," + \
-        str(row["account_id"]) + "," + \
-        "from_unixtime(" + str(row["start_time"]) + ")" + "," + \
-        str(row["kills"]) + "," + \
-        str(row["deaths"]) + "," + \
-        str(row["last_hits"]) + "," + \
-        str(row["denies"]) + "," + \
-        str(row["gold_per_min"]) + "," + \
-        str(row["towers_killed"]) + "," + \
-        str(row["roshans_killed"]) + "," + \
-        str(row["teamfight_participation"]) + "," + \
-        str(row["obs_placed"]) + "," + \
-        str(row["camps_stacked"]) + "," + \
-        str(row["rune_pickups"]) + "," + \
-        str(row["firstblood_claimed"]) + "," + \
-        str(row["stuns"]) + ")"
+        insertQuery = "INSERT INTO Result (MatchID, PlayerID, MatchDate, Kills, \
+        Deaths, LastHits, Denies, GPM, Tower, Rosh, Participation, Observers, \
+        Stacks, Runes, FirstBloods, Stun) VALUES "
 
-        if (i != len(rows) - 1):
-            insertQuery += ", "
-    
-    TRASH_CURSOR.execute(insertQuery)
+        #insert into result table
+        for i, row in enumerate(rows):
+            insertQuery += "(" + \
+            str(row["match_id"]) + "," + \
+            str(row["account_id"]) + "," + \
+            "from_unixtime(" + str(row["start_time"]) + ")" + "," + \
+            str(row["kills"]) + "," + \
+            str(row["deaths"]) + "," + \
+            str(row["last_hits"]) + "," + \
+            str(row["denies"]) + "," + \
+            str(row["gold_per_min"]) + "," + \
+            str(row["towers_killed"]) + "," + \
+            str(row["roshans_killed"]) + "," + \
+            str(row["teamfight_participation"]) + "," + \
+            str(row["obs_placed"]) + "," + \
+            str(row["camps_stacked"]) + "," + \
+            str(row["rune_pickups"]) + "," + \
+            str(row["firstblood_claimed"]) + "," + \
+            str(row["stuns"]) + ")"
 
-    #apply changes
-    TRASH_DB.commit()
+            if (i != len(rows) - 1):
+                insertQuery += ", "
+        
+        TRASH_CURSOR.execute(insertQuery)
+
+        #apply changes
+        TRASH_DB.commit()
     print(str(len(rows)) + "new rows pushed")
 
 TRASH_DB.close()

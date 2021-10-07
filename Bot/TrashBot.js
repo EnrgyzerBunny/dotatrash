@@ -20,6 +20,8 @@ const ROSTER_LOCK_START_M = 30;
 const ROSTER_LOCK_END_H = 12;
 const ROSTER_LOCK_END_M = 0;
 
+var ROSTER_FORCELOCK = false;
+
 
 //hacky enums
 const DRAFT_MODE_OFF = 0;
@@ -632,7 +634,7 @@ client.on('ready', () => {
 
                 var hours = new Date().getHours();
                 var min = new Date().getMinutes();
-                if ((hours > ROSTER_LOCK_START_H || (hours == ROSTER_LOCK_START_H && min >= ROSTER_LOCK_START_M)) ||
+                if (ROSTER_FORCELOCK || (hours > ROSTER_LOCK_START_H || (hours == ROSTER_LOCK_START_H && min >= ROSTER_LOCK_START_M)) ||
                     ((hours < ROSTER_LOCK_END_H) || hours == ROSTER_LOCK_END_H && min <= ROSTER_LOCK_END_M)) {
                         client.api.interactions(interaction.id, interaction.token).callback.post({
                             data: {
@@ -706,7 +708,7 @@ client.on('ready', () => {
             if (subCommand === 'play') {
                 var hours = new Date().getHours();
                 var min = new Date().getMinutes();
-                if ((hours > ROSTER_LOCK_START_H || (hours == ROSTER_LOCK_START_H && min >= ROSTER_LOCK_START_M)) ||
+                if (ROSTER_FORCELOCK || (hours > ROSTER_LOCK_START_H || (hours == ROSTER_LOCK_START_H && min >= ROSTER_LOCK_START_M)) ||
                     ((hours < ROSTER_LOCK_END_H) || hours == ROSTER_LOCK_END_H && min <= ROSTER_LOCK_END_M)) {
                         client.api.interactions(interaction.id, interaction.token).callback.post({
                             data: {
@@ -2642,11 +2644,7 @@ function FetchMatchups() {
 
 function PrintScores(userId,all) {
 
-    //TODO:
-    //grab matchups (joined with ownername)
-    //filter to current days matchups
-    //if !all then filter to just matchup containing user
-    //pull score query for team with date from matchup date to next matchup date (or matchup date + 1day if no next matchup)
+    
 
     return new Promise(async function (resolve, reject)
     {
@@ -2673,9 +2671,9 @@ function PrintScores(userId,all) {
         }
 
         var futureMatchup = false;
-        if (lastMatchup == null) {
+        if (lastMatchup == null || !RosterLocked()) {
             futureMatchup = true;
-            formattedOutput += "\nNo current matchup - displaying next upcomming.\n";
+            formattedOutput += "\nDisplaying next upcomming.\n";
         }
         var targetDate = (!futureMatchup)? lastMatchup : nextMatchup;
         console.log("matchupdate: " + new Date(Date.parse(targetDate) - 25200000).toISOString());
@@ -2988,4 +2986,14 @@ async function DiscordLog(msg) {
 
 function TabFormat(text,length) {
     return text.substring(0,length).padEnd(length," ");
+}
+
+function RosterLocked() {
+    var hours = new Date().getHours();
+    var min = new Date().getMinutes();
+    if (ROSTER_FORCELOCK || (hours > ROSTER_LOCK_START_H || (hours == ROSTER_LOCK_START_H && min >= ROSTER_LOCK_START_M)) ||
+        ((hours < ROSTER_LOCK_END_H) || hours == ROSTER_LOCK_END_H && min <= ROSTER_LOCK_END_M)) {
+        return true;
+    }
+    return false;
 }
