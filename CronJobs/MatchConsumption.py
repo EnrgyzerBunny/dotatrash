@@ -47,10 +47,11 @@ print(datetime.datetime.now())
 TRASH_CURSOR = TRASH_DB.cursor()
 
 #Get latest parsed match ID
-TRASH_CURSOR.execute("SELECT MatchID FROM Result ORDER BY MatchID DESC LIMIT 1")
+TRASH_CURSOR.execute("SELECT DISTINCT MatchID FROM Result ORDER BY MatchID DESC LIMIT 25")
 queryResult = TRASH_CURSOR.fetchall()
-print(queryResult[0][0])
-lastID = queryResult[0][0]
+print("latest:" + str(queryResult[0][0]))
+print("checking from:" + str(queryResult[len(queryResult)-1][0]))
+lastID = queryResult[len(queryResult)-1][0]
 
 RESULT_ENDPOINT = RESULT_ENDPOINT.replace("<LAST_ID>",str(lastID))
 #switch back to above when DB is seeded - currently would cause error due to result amount
@@ -98,7 +99,23 @@ if (len(errorRows) > 0):
 print(str(len(rows)) + " rows validated. " + str(len(errorRows)) + " error rows.")
 
 
+
+
 if (len(rows) > 0):
+
+    dupRows = []
+    #remove duplicate rows
+    for i, row in enumerate(rows):
+        checkQuery = "SELECT MatchID FROM Result WHERE MatchID = " + str(row["match_id"]) + " AND PlayerID = " + str(row["account_id"])
+        TRASH_CURSOR.execute(checkQuery)
+        checkResult = TRASH_CURSOR.fetchall()
+        if (len(checkResult) > 0):
+            dupRows.append(row)
+    
+    for i, row in enumerate(dupRows):
+        rows.remove(row)
+
+
     insertQuery = "INSERT INTO Result (MatchID, PlayerID, MatchDate, Kills, \
     Deaths, LastHits, Denies, GPM, Tower, Rosh, Participation, Observers, \
     Stacks, Runes, FirstBloods, Stun) VALUES "
@@ -130,6 +147,6 @@ if (len(rows) > 0):
 
     #apply changes
     TRASH_DB.commit()
-    print(str(len(rows)) + " new rows pushed")
+    print(str(len(rows)) + "new rows pushed")
 
 TRASH_DB.close()

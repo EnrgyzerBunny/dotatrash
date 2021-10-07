@@ -632,8 +632,8 @@ client.on('ready', () => {
 
                 var hours = new Date().getHours();
                 var min = new Date().getMinutes();
-                if ((hours > ROSTER_LOCK_START_H || (hours == ROSTER_LOCK_START_H && minutes >= ROSTER_LOCK_START_M)) ||
-                    ((hours < ROSTER_LOCK_END_H) || hours == ROSTER_LOCK_END_H && minutes <= ROSTER_LOCK_END_M)) {
+                if ((hours > ROSTER_LOCK_START_H || (hours == ROSTER_LOCK_START_H && min >= ROSTER_LOCK_START_M)) ||
+                    ((hours < ROSTER_LOCK_END_H) || hours == ROSTER_LOCK_END_H && min <= ROSTER_LOCK_END_M)) {
                         client.api.interactions(interaction.id, interaction.token).callback.post({
                             data: {
                                 type: 4,
@@ -706,8 +706,8 @@ client.on('ready', () => {
             if (subCommand === 'play') {
                 var hours = new Date().getHours();
                 var min = new Date().getMinutes();
-                if ((hours > ROSTER_LOCK_START_H || (hours == ROSTER_LOCK_START_H && minutes >= ROSTER_LOCK_START_M)) ||
-                    ((hours < ROSTER_LOCK_END_H) || hours == ROSTER_LOCK_END_H && minutes <= ROSTER_LOCK_END_M)) {
+                if ((hours > ROSTER_LOCK_START_H || (hours == ROSTER_LOCK_START_H && min >= ROSTER_LOCK_START_M)) ||
+                    ((hours < ROSTER_LOCK_END_H) || hours == ROSTER_LOCK_END_H && min <= ROSTER_LOCK_END_M)) {
                         client.api.interactions(interaction.id, interaction.token).callback.post({
                             data: {
                                 type: 4,
@@ -2678,7 +2678,7 @@ function PrintScores(userId,all) {
             formattedOutput += "\nNo current matchup - displaying next upcomming.\n";
         }
         var targetDate = (!futureMatchup)? lastMatchup : nextMatchup;
-        console.log("matchupdate: " + new Date(Date.parse(targetDate)).toISOString());
+        console.log("matchupdate: " + new Date(Date.parse(targetDate) - 25200000).toISOString());
         formattedOutput += "\n" + targetDate + ":\n";
 
         var currentMatchups = new Array();
@@ -2705,7 +2705,7 @@ function PrintScores(userId,all) {
             Player ON Team.TeamID = Player.FantasyTeamID JOIN \
             ProTeam ON Player.ProTeamID = ProTeam.ProTeamID JOIN \
             Result ON Player.AccountID = Result.PlayerID \
-            WHERE Result.MatchDate > '" + new Date(Date.parse(targetDate)).toISOString() + "' AND \
+            WHERE Result.MatchDate > '" + new Date(Date.parse(targetDate)- 25200000).toISOString() + "' AND \
             Player.PlayStatus = 1 AND \
             Team.SeasonID = 3 \
             GROUP BY Player.PlayerID", function (err, result, fields) {
@@ -2715,9 +2715,9 @@ function PrintScores(userId,all) {
                     var bye = (currentMatchups[i].TeamB_ID == 0);
                     var teamAPt = 0;
                     var teamBPt = 0;
-                    console.log(result.length);
+                    //console.log(result.length);
                     for (var j = 0; j < result.length; j++) {
-                        console.log(result[j].TeamID.toString() + "|" + currentMatchups[i].TeamA_ID.toString() + "|" + currentMatchups[i].TeamB_ID.toString() + "|" + Number(result[j].Points).toString());
+                        //console.log(result[j].TeamID.toString() + "|" + currentMatchups[i].TeamA_ID.toString() + "|" + currentMatchups[i].TeamB_ID.toString() + "|" + Number(result[j].Points).toString());
                         if (result[j].TeamID.toString() == currentMatchups[i].TeamA_ID.toString()) {
                             teamAPt += Number(result[j].Points);
                         }
