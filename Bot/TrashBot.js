@@ -2572,6 +2572,11 @@ function VerifyPickups(pickups) {
             if (error) throw error;
             connection.query("SELECT PlayerID FROM Player WHERE FantasyTeamID = 0 AND PlayerID IN (" + pickups.join(",") + ")" , function (err, result, fields) {
 
+                if (result == null || pickups == null)
+                {
+                    resolve(false);
+                    return;
+                }
                 if (result.length == pickups.length) {
                     resolve(true);
                 }
