@@ -21,6 +21,7 @@ const ROSTER_LOCK_END_H = 12;
 const ROSTER_LOCK_END_M = 0;
 
 var ROSTER_FORCELOCK = false;
+var ROSTER_FORCEOPEN = true;
 
 
 //hacky enums
@@ -634,8 +635,8 @@ client.on('ready', () => {
 
                 var hours = new Date().getHours();
                 var min = new Date().getMinutes();
-                if (ROSTER_FORCELOCK || (hours > ROSTER_LOCK_START_H || (hours == ROSTER_LOCK_START_H && min >= ROSTER_LOCK_START_M)) ||
-                    ((hours < ROSTER_LOCK_END_H) || hours == ROSTER_LOCK_END_H && min <= ROSTER_LOCK_END_M)) {
+                if (!ROSTER_FORCEOPEN && (ROSTER_FORCELOCK || (hours > ROSTER_LOCK_START_H || (hours == ROSTER_LOCK_START_H && min >= ROSTER_LOCK_START_M)) ||
+                    ((hours < ROSTER_LOCK_END_H) || hours == ROSTER_LOCK_END_H && min <= ROSTER_LOCK_END_M))) {
                         client.api.interactions(interaction.id, interaction.token).callback.post({
                             data: {
                                 type: 4,
@@ -708,8 +709,8 @@ client.on('ready', () => {
             if (subCommand === 'play') {
                 var hours = new Date().getHours();
                 var min = new Date().getMinutes();
-                if (ROSTER_FORCELOCK || (hours > ROSTER_LOCK_START_H || (hours == ROSTER_LOCK_START_H && min >= ROSTER_LOCK_START_M)) ||
-                    ((hours < ROSTER_LOCK_END_H) || hours == ROSTER_LOCK_END_H && min <= ROSTER_LOCK_END_M)) {
+                if (!ROSTER_FORCEOPEN && (ROSTER_FORCELOCK || (hours > ROSTER_LOCK_START_H || (hours == ROSTER_LOCK_START_H && min >= ROSTER_LOCK_START_M)) ||
+                ((hours < ROSTER_LOCK_END_H) || hours == ROSTER_LOCK_END_H && min <= ROSTER_LOCK_END_M))) {
                         client.api.interactions(interaction.id, interaction.token).callback.post({
                             data: {
                                 type: 4,
@@ -850,7 +851,13 @@ client.on('ready', () => {
             }
 
             if (subCommand === 'history') {
-                let output = await PrintRequestHistory();
+                var page = 1;
+
+                if (args[0].options != null && args[0].options[0] != null)
+                {
+                    page = args[0].options[0].value;
+                }
+                let output = await PrintRequestHistory(page);
                 if (output == null) {
                     output = "Error pulling list";
                 }
@@ -2389,22 +2396,30 @@ function FetchOwners() {
     });
 }
 
-function PrintRequestHistory() {
+function PrintRequestHistory(page) {
+
+    var limit = 10;
+        var offset = 0;
+        offset = (page - 1) * limit;
+        var formattedOutput = "```Page: " + page + "\n";
+
     return new Promise(async function (resolve, reject)
     {
-        var formattedOutput = "```\n";
+
+        
 
         let owners = await FetchOwners();
 
         TrashDBPool.getConnection(function(error, connection) {
-            if (error) throw error;
             
-            connection.query("SELECT RequestLogID, RequestID, OwnerID, SeasonID, DATE_FORMAT(RequestTime,'%Y-%m-%d %H:%i:%s') as RequestTime, RequestType, RequestedPlayers, GivenPlayers, RequestStatus FROM RequestLog WHERE SeasonID = (SELECT SeasonID FROM Season ORDER BY SeasonID DESC LIMIT 1) AND RequestType IN (0,2) ORDER BY RequestLogID ASC", async function (err, result, fields) {
+            
+            connection.query("SELECT RequestLogID, RequestID, OwnerID, SeasonID, DATE_FORMAT(RequestTime,'%Y-%m-%d %H:%i:%s') as RequestTime, RequestType, RequestedPlayers, GivenPlayers, RequestStatus FROM RequestLog WHERE SeasonID = (SELECT SeasonID FROM Season ORDER BY SeasonID DESC LIMIT 1) AND RequestType IN (0,2) ORDER BY RequestLogID ASC LIMIT " + offset + "," + limit, async function (err, result, fields) {
                 
                 formattedOutput += "Time                |Owner                 |Type    |Pickups                      |Drops                        |Status\n";
                 formattedOutput += "-----------------------------------------------------------------------------------------------------------------------\n";
 
-                if (result.length <= 0)
+                
+                if (result == null || result.length <= 0)
                 {
                     formattedOutput += "None\n";
                 }
@@ -2675,11 +2690,18 @@ function PrintScores(userId,all) {
             }
         }
 
+        
+
         var futureMatchup = false;
         if (lastMatchup == null || !RosterLocked()) {
+            if (nextMatchup == null) {
+                resolve("No current matchups");
+                return;
+            }
             futureMatchup = true;
             formattedOutput += "\nDisplaying next upcomming.\n";
         }
+        
         var targetDate = (!futureMatchup)? lastMatchup : nextMatchup;
         console.log("matchupdate: " + new Date(Date.parse(targetDate) - 25200000).toISOString());
         formattedOutput += "\n" + targetDate + ":\n";
@@ -2996,8 +3018,8 @@ function TabFormat(text,length) {
 function RosterLocked() {
     var hours = new Date().getHours();
     var min = new Date().getMinutes();
-    if (ROSTER_FORCELOCK || (hours > ROSTER_LOCK_START_H || (hours == ROSTER_LOCK_START_H && min >= ROSTER_LOCK_START_M)) ||
-        ((hours < ROSTER_LOCK_END_H) || hours == ROSTER_LOCK_END_H && min <= ROSTER_LOCK_END_M)) {
+    if (!ROSTER_FORCEOPEN && (ROSTER_FORCELOCK || (hours > ROSTER_LOCK_START_H || (hours == ROSTER_LOCK_START_H && min >= ROSTER_LOCK_START_M)) ||
+    ((hours < ROSTER_LOCK_END_H) || hours == ROSTER_LOCK_END_H && min <= ROSTER_LOCK_END_M))) {
         return true;
     }
     return false;

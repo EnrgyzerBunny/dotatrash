@@ -90,8 +90,11 @@ def ExecuteReq(request,cursor):
         if (request[5] != None):
             cursor.execute("UPDATE Player SET FantasyTeamID = 0 WHERE PlayerID IN (" + str(request[5]).replace('-',',') + ")")
         cursor.execute("DELETE FROM Request WHERE RequestID = " + str(request[0]))
+        drops = "NULL"
+        if (request[5] != None):
+            drops = str(request[5])
         cursor.execute("INSERT INTO RequestLog (RequestID,OwnerID,SeasonID,RequestTime,RequestType,RequestedPlayers,GivenPlayers,TradeOwner,RequestStatus) VALUES \
-            (" + str(request[0]) + "," + str(request[1]) + ",3,'" + str(request[2]) + "'," + str(request[3]) + "," + str(request[4]) + "," + str(request[5]) + ",0,1)")
+            (" + str(request[0]) + "," + str(request[1]) + ",3,'" + str(request[2]) + "'," + str(request[3]) + "," + str(request[4]) + "," + drops + ",0,1)")
         print("SUCCESS\n")
         return True
     else:
