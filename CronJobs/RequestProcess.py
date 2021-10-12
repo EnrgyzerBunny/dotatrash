@@ -52,6 +52,7 @@ def RefreshPlayers():
 players = RefreshPlayers()
 
 def ValidateRequest(request):
+    players = RefreshPlayers()
     for i, playerId in enumerate(str(request[4]).split('-')):
         for j, player in enumerate(players):
             if (str(player[0]) != playerId):

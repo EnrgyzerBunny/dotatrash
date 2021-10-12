@@ -21,7 +21,7 @@ const ROSTER_LOCK_END_H = 12;
 const ROSTER_LOCK_END_M = 0;
 
 var ROSTER_FORCELOCK = false;
-var ROSTER_FORCEOPEN = true;
+var ROSTER_FORCEOPEN = false;
 
 
 //hacky enums
