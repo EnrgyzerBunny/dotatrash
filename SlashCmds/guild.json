@@ -1,0 +1,114 @@
+[
+    {
+        "id": "846103250590498888",
+        "application_id": "845415660683132970",
+        "name": "teams",
+        "description": "list season teams",
+        "version": "859131343941926922",
+        "default_permission": true,
+        "type": 1,
+        "guild_id": "220670947479257088"
+    },
+    {
+        "id": "861253803617812490",
+        "application_id": "845415660683132970",
+        "name": "draft",
+        "description": "Start/Stop Draft Mode",
+        "version": "861253803617812491",
+        "default_permission": false,
+        "type": 1,
+        "guild_id": "220670947479257088",
+        "options": [
+            {
+                "type": 5,
+                "name": "randomized",
+                "description": "Draft order should be randomly generated"
+            }
+        ]
+    },
+    {
+        "id": "862407026328207400",
+        "application_id": "845415660683132970",
+        "name": "draftorder",
+        "description": "Set Draft order prior to beginning draft.",
+        "version": "862407026328207401",
+        "default_permission": false,
+        "type": 1,
+        "guild_id": "220670947479257088",
+        "options": [
+            {
+                "type": 1,
+                "name": "list",
+                "description": "Display users and ids for use with set command"
+            },
+            {
+                "type": 1,
+                "name": "set",
+                "description": "Set order",
+                "options": [
+                    {
+                        "type": 3,
+                        "name": "order",
+                        "description": "List of ids to set draft order (user list command for ids). Seperate with commas",
+                        "required": true
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "863209936674619422",
+        "application_id": "845415660683132970",
+        "name": "pick",
+        "description": "Draft pick a player",
+        "version": "889259830911574067",
+        "default_permission": false,
+        "type": 1,
+        "guild_id": "220670947479257088",
+        "options": [
+            {
+                "type": 4,
+                "name": "playerid",
+                "description": "ID of player from list",
+                "required": true
+            }
+        ]
+    },
+    {
+        "id": "863825999833727006",
+        "application_id": "845415660683132970",
+        "name": "pushdraft",
+        "description": "Push draft results to DB",
+        "version": "863825999833727007",
+        "default_permission": false,
+        "type": 1,
+        "guild_id": "220670947479257088"
+    },
+    {
+        "id": "864279665085513779",
+        "application_id": "845415660683132970",
+        "name": "freeagents",
+        "description": "Lists currently available freeagents",
+        "version": "864287298925625344",
+        "default_permission": true,
+        "type": 1,
+        "guild_id": "220670947479257088",
+        "options": [
+            {
+                "type": 4,
+                "name": "page",
+                "description": "Page to display"
+            }
+        ]
+    },
+    {
+        "id": "864919545718505482",
+        "application_id": "845415660683132970",
+        "name": "confirmpick",
+        "description": "Lock in your current draft pick and end your turn",
+        "version": "889259955998306354",
+        "default_permission": false,
+        "type": 1,
+        "guild_id": "220670947479257088"
+    }
+]

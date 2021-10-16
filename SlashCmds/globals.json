@@ -1,0 +1,221 @@
+[
+    {
+        "id": "855597344258785310",
+        "application_id": "845415660683132970",
+        "name": "join",
+        "description": "Join the Dota Trash league",
+        "version": "889259000993026048",
+        "default_permission": false,
+        "type": 1
+    },
+    {
+        "id": "856582507214667777",
+        "application_id": "845415660683132970",
+        "name": "createteam",
+        "description": "Create a team for the current season",
+        "version": "889259097709486110",
+        "default_permission": false,
+        "type": 1,
+        "options": [
+            {
+                "type": 3,
+                "name": "name",
+                "description": "Name of team",
+                "required": true
+            }
+        ]
+    },
+    {
+        "id": "868877337360470046",
+        "application_id": "845415660683132970",
+        "name": "roster",
+        "description": "List or set team roster",
+        "version": "889258704850022430",
+        "default_permission": true,
+        "type": 1,
+        "options": [
+            {
+                "type": 1,
+                "name": "list",
+                "description": "List current team roster"
+            },
+            {
+                "type": 1,
+                "name": "play",
+                "description": "Move a benched player to active play",
+                "options": [
+                    {
+                        "type": 4,
+                        "name": "playerid",
+                        "description": "PlayerID of player to move - use /roster list to view",
+                        "required": true
+                    }
+                ]
+            },
+            {
+                "type": 1,
+                "name": "bench",
+                "description": "Move an active player to the bench",
+                "options": [
+                    {
+                        "type": 4,
+                        "name": "playerid",
+                        "description": "PlayerID of player to move - use /roster list to view",
+                        "required": true
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "872606000849489960",
+        "application_id": "845415660683132970",
+        "name": "request",
+        "description": "list, submit, or cancel a request",
+        "version": "896936433451937853",
+        "default_permission": true,
+        "type": 1,
+        "options": [
+            {
+                "type": 1,
+                "name": "list",
+                "description": "List current pending requests and recently completed"
+            },
+            {
+                "type": 1,
+                "name": "history",
+                "description": "List the request log for the season",
+                "options": [
+                    {
+                        "type": 4,
+                        "name": "page",
+                        "description": "Page to display"
+                    }
+                ]
+            },
+            {
+                "type": 1,
+                "name": "cancel",
+                "description": "Cancel an existing request",
+                "options": [
+                    {
+                        "type": 4,
+                        "name": "requestid",
+                        "description": "RequestID of pending request to be cancelled",
+                        "required": true
+                    }
+                ]
+            },
+            {
+                "type": 1,
+                "name": "submit",
+                "description": "Submit a new request to pickup and/or drop",
+                "options": [
+                    {
+                        "type": 3,
+                        "name": "pickups",
+                        "description": "PlayerIDs of free agent(s) to pickup. Comma seperated for multiple"
+                    },
+                    {
+                        "type": 3,
+                        "name": "drops",
+                        "description": "PlayerIDs of benched players to drop. Comma seperated for multiple"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "880134478016675941",
+        "application_id": "845415660683132970",
+        "name": "trade",
+        "description": "list, submit, or respond to a trade request",
+        "version": "889258846332289104",
+        "default_permission": true,
+        "type": 1,
+        "options": [
+            {
+                "type": 1,
+                "name": "list",
+                "description": "List current pending trades and recently completed"
+            },
+            {
+                "type": 1,
+                "name": "cancel",
+                "description": "Cancel an existing trade",
+                "options": [
+                    {
+                        "type": 4,
+                        "name": "tradeid",
+                        "description": "RequestID of pending trade to be cancelled",
+                        "required": true
+                    }
+                ]
+            },
+            {
+                "type": 1,
+                "name": "respond",
+                "description": "Accept or Deny a pending trade",
+                "options": [
+                    {
+                        "type": 4,
+                        "name": "tradeid",
+                        "description": "RequestID of pending trade",
+                        "required": true
+                    },
+                    {
+                        "type": 3,
+                        "name": "action",
+                        "description": "Accept or Deny",
+                        "required": true,
+                        "choices": [
+                            {
+                                "name": "accept",
+                                "value": "Accept"
+                            },
+                            {
+                                "name": "deny",
+                                "value": "Deny"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "type": 1,
+                "name": "new",
+                "description": "Submit a new trade request",
+                "options": [
+                    {
+                        "type": 3,
+                        "name": "pickups",
+                        "description": "PlayerIDs of players from other owners team. Comma seperated for multiple",
+                        "required": true
+                    },
+                    {
+                        "type": 3,
+                        "name": "given",
+                        "description": "PlayerIDs of benched players to give in trade. Comma seperated for multiple",
+                        "required": true
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "895358885441966151",
+        "application_id": "845415660683132970",
+        "name": "scores",
+        "description": "Display scores for current matchup",
+        "version": "895358885441966152",
+        "default_permission": true,
+        "type": 1,
+        "options": [
+            {
+                "type": 5,
+                "name": "all",
+                "description": "Display scores for all matchups"
+            }
+        ]
+    }
+]
